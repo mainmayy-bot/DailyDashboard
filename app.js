@@ -69,7 +69,8 @@ function occursOn(todo,date){
   const base=todo.due?.slice(0,10)||todo.scheduledDate||localDateISO(new Date());
   if(date<base)return false;
   if((todo.completions||[]).includes(date))return false;
-  if(!todo.repeat||todo.repeat==="none")return date===base;
+  // 单次任务在到期日之后继续出现，直到用户真正完成它。
+  if(!todo.repeat||todo.repeat==="none")return date>=base;
   const d=new Date(`${date}T12:00:00`),b=new Date(`${base}T12:00:00`);
   if(todo.repeat==="daily")return true;
   if(todo.repeat==="weekdays")return d.getDay()>0&&d.getDay()<6;
@@ -81,8 +82,9 @@ function occursOn(todo,date){
 function render() {
   const steps = allSteps().filter(x=>occursOn(x,state.viewDate));
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
+  const scheduledCount = steps.filter(x => x.status === 1 && (x.scheduledDate || x.due)).length;
   $("#dateLabel").innerHTML=`<button data-date-shift="-1" aria-label="前一天">‹</button><input id="calendarDate" type="date" value="${state.viewDate}"><button data-date-shift="1" aria-label="后一天">›</button><button data-date-today>今天</button>`;
-  $("#statTodo").textContent = counts[0]; $("#statDoing").textContent = counts[1]; $("#statDone").textContent = counts[2];
+  $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = counts[2];
   $("#sideDone").textContent = counts[2]; $("#sideDoing").textContent = counts[1];
   $("#loadTime").textContent = `${counts[1]} 项进行中`;
   const isToday=state.viewDate===localDateISO(new Date());
@@ -108,11 +110,29 @@ function renderTimeline(steps) {
 
 function formatEndTime(start,duration){ const total=Number(start.slice(0,2))*60+Number(start.slice(3))+duration*60; return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`; }
 
+function taskDate(todo){return todo.due?.slice(0,10)||todo.scheduledDate||"";}
+function isTaskScheduled(todo){return Boolean(taskDate(todo));}
+function isTaskOverdue(todo,date=state.viewDate){
+  if(todo.status!==1||!isTaskScheduled(todo))return false;
+  const dueDate=taskDate(todo),today=localDateISO(new Date());
+  if(dueDate<date)return true;
+  if(date!==today||dueDate!==today)return false;
+  const time=todo.due?.includes("T")?todo.due.slice(11,16):todo.scheduledHour;
+  if(!time)return false;
+  const now=new Date(),current=now.getHours()*60+now.getMinutes();
+  const end=Number(time.slice(0,2))*60+Number(time.slice(3))+(todo.duration||1)*60;
+  return current>end;
+}
+
 function renderFocus(steps) {
   const rank=new Map(state.todoOrder.map((key,index)=>[key,index]));
   const doing = steps.filter(x => x.status === 1).sort((a,b)=>(rank.get(a.sourceKey)??9999)-(rank.get(b.sourceKey)??9999));
   state.todoOrder=[...new Set([...doing.map(x=>x.sourceKey),...state.todoOrder])];
-  $("#focusList").innerHTML = doing.length ? doing.map(x => `<article class="focus-item todo-card" draggable="true" data-todo-key="${x.sourceKey}" style="--c:${colors[x.area] || colors.admin}"><div class="todo-card-top"><span class="todo-grip" title="拖拽排序或安排时间">⠿</span><button class="todo-check" data-complete-action="${x.sourceKey}" aria-label="完成待办"><i></i></button><button class="todo-main" data-edit-action="${x.sourceKey}"><span><b>${escapeHtml(x.text)}</b><small>${todoMeta(x)}</small></span></button><button class="todo-delete" data-delete-todo="${x.sourceKey}" aria-label="删除待办">×</button></div>${x.notes?`<button class="todo-note" data-edit-action="${x.sourceKey}"><i>备注</i><span>${escapeHtml(x.notes)}</span></button>`:""}${x.subtasks?.length?`<div class="todo-subtasks"><div class="todo-subtasks-head"><span>子任务</span><b>${x.subtasks.filter(s=>s.done).length}/${x.subtasks.length}</b></div>${x.subtasks.map(s=>`<button class="todo-subtask ${s.done?"done":""}" data-toggle-subtask="${x.sourceKey}" data-subtask-id="${s.id}"><i>${s.done?"✓":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div>`:""}</article>`).join("") : `<div class="empty">暂无今日行动</div>`;
+  $("#focusList").innerHTML = doing.length ? doing.map(x => {
+    const overdue=isTaskOverdue(x),unscheduled=!isTaskScheduled(x);
+    const alert=overdue?`<em class="todo-alert overdue-alert">! 已逾期</em>`:unscheduled?`<em class="todo-alert unscheduled-alert">待排期</em>`:"";
+    return `<article class="focus-item todo-card ${overdue?"is-overdue":unscheduled?"is-unscheduled":""}" draggable="true" data-todo-key="${x.sourceKey}" style="--c:${colors[x.area] || colors.admin}"><div class="todo-card-top"><span class="todo-grip" title="拖拽排序或安排时间">⠿</span><button class="todo-check" data-complete-action="${x.sourceKey}" aria-label="完成待办"><i></i></button><button class="todo-main" data-edit-action="${x.sourceKey}"><span><span class="todo-title-line"><b>${escapeHtml(x.text)}</b>${alert}</span><small>${todoMeta(x)}</small></span></button><button class="todo-delete" data-delete-todo="${x.sourceKey}" aria-label="删除待办">×</button></div>${x.notes?`<button class="todo-note" data-edit-action="${x.sourceKey}"><i>备注</i><span>${escapeHtml(x.notes)}</span></button>`:""}${x.subtasks?.length?`<div class="todo-subtasks"><div class="todo-subtasks-head"><span>子任务</span><b>${x.subtasks.filter(s=>s.done).length}/${x.subtasks.length}</b></div>${x.subtasks.map(s=>`<button class="todo-subtask ${s.done?"done":""}" data-toggle-subtask="${x.sourceKey}" data-subtask-id="${s.id}"><i>${s.done?"✓":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div>`:""}</article>`;
+  }).join("") : `<div class="empty">暂无今日行动</div>`;
 }
 
 function todoMeta(todo){const bits=[];bits.push(todo.project||todo.sourceProject||"独立待办");bits.push(todo.due?todo.due.replace("T"," "):todo.scheduledHour||"未安排时间");if(todo.repeat&&todo.repeat!=="none")bits.push({daily:"每天",weekdays:"工作日",weekly:"每周",monthly:"每月"}[todo.repeat]);if(todo.subtasks?.length)bits.push(`${todo.subtasks.filter(s=>s.done).length}/${todo.subtasks.length} 子任务`);return bits.join(" · ");}
