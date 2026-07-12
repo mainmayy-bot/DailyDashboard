@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>人生行动台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><b>行</b><div><strong>人生行动台</strong><small>I'M NOT DOING SHIT TODAY</small></div></div>
+        <nav>
+          <button class="nav-item active" data-view="today"><span class="nav-icon icon-today"></span>今日</button>
+          <button class="nav-item" data-view="inbox"><span class="nav-icon icon-todo"></span>待办</button>
+          <button class="nav-item" data-view="projects"><span class="nav-icon icon-project"></span>项目</button>
+          <button class="nav-item" data-view="areas"><span class="nav-icon icon-area"></span>领域</button>
+        </nav>
+        <div class="side-summary">
+          <h4>领域</h4>
+          <div id="sideAreas"></div>
+        </div>
+        <div class="side-summary">
+          <h4>今日状态</h4>
+          <p><i class="dot done"></i>已完成 <b id="sideDone">0</b></p>
+          <p><i class="dot doing"></i>进行中 <b id="sideDoing">0</b></p>
+        </div>
+      </aside>
+
+      <section class="main-content">
+        <section class="top-grid">
+          <article class="panel timeline-panel">
+            <header><h2>今日时间轴</h2><span id="dateLabel"></span></header>
+            <div id="timeline" class="timeline"></div>
+          </article>
+          <article class="panel focus-panel">
+            <header><h2>今日负载</h2><strong id="loadTime">0 / 0</strong></header>
+            <div class="stats">
+              <div><b id="statTodo">0</b><span>待办</span></div>
+              <div><b id="statDoing">0</b><span>进行中</span></div>
+              <div><b id="statDone">0</b><span>已完成</span></div>
+            </div>
+            <div class="mini-title"><span>正在推进</span><span>点击切换状态</span></div>
+            <div id="focusList" class="focus-list"></div>
+            <button class="ghost-add" data-add="quick">＋ 添加快速待办</button>
+          </article>
+        </section>
+
+        <section class="middle-grid">
+          <article class="panel projects-panel">
+            <header><div><h2>项目推进</h2><small>按结果拆下一步</small></div><button class="text-btn" data-add="project">＋ 新建项目</button></header>
+            <div id="projectGrid" class="project-grid"></div>
+          </article>
+          <article class="panel signals-panel">
+            <header><h2>推进信号</h2><span>自动汇总</span></header>
+            <div id="signals" class="signals"></div>
+          </article>
+        </section>
+
+        <section class="panel areas-panel">
+          <header><div><h2>领域仪表盘</h2><small>点击卡片管理领域任务</small></div><span>任务完成度自动计算</span></header>
+          <div id="areaGrid" class="area-grid"></div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="modal">
+      <form method="dialog" class="modal-card" id="modalCard">
+        <button class="modal-close" value="cancel" aria-label="关闭">×</button>
+        <div id="modalBody"></div>
+      </form>
+    </dialog>
+    <script src="./app.js"></script>
+  </body>
+</html>
