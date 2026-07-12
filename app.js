@@ -1,6 +1,9 @@
 const KEY = "life-action-board-v2";
+const SUPABASE_URL = "https://xmvvcebjglyyttlceicw.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nEHf0fkntvsC_pzDyXqIUw_8vY_fS20";
 const colors = { fortune: "#d4a83e", beauty: "#c7665b", soul: "#6f9673", admin: "#668bb3" };
 const TIMELINE_HOUR_HEIGHT = 48;
+let cloudClient=null, cloudUser=null, cloudReady=false, cloudTimer=null, cloudStatus="本机保存";
 const defaults = {
   areas: [
     { id: "fortune", name: "Fortune", cn: "财富", icon: "▣", tasks: [{ id: 1, text: "整理本周收入目标", done: false }, { id: 2, text: "复盘一个增长机会", done: true }, { id: 3, text: "学习 30 分钟理财知识", done: false }] },
@@ -35,7 +38,7 @@ state.quick.forEach(normalizeSubtasks);state.projects.forEach(p=>p.steps.forEach
 if(!state.viewDate)state.viewDate=localDateISO(new Date());
 localStorage.setItem(KEY, JSON.stringify(state));
 const $ = s => document.querySelector(s);
-const save = () => { localStorage.setItem(KEY, JSON.stringify(state)); render(); };
+const save = () => { localStorage.setItem(KEY, JSON.stringify(state)); render(); scheduleCloudSave(); };
 const pct = items => items.length ? Math.round(items.filter(x => x.status === 2).length / items.length * 100) : 0;
 const statusText = s => ["未做", "在做", "已完成"][s];
 const domainStatusText = s => ["计划中", "推进中"][s];
@@ -52,6 +55,13 @@ function sourceItem(key) {
 }
 
 function normalizeSubtasks(item){item.subtasks=(item.subtasks||[]).map((s,i)=>typeof s==="string"?{id:`sub${Date.now()}${i}`,text:s,done:false}:s);}
+function updateCloudButton(){const button=$("#cloudAccount");if(!button)return;button.classList.toggle("connected",!!cloudUser);button.classList.toggle("syncing",cloudStatus==="同步中");button.querySelector("span").textContent=cloudUser?`${cloudStatus} · ${cloudUser.email||"已登录"}`:"登录并同步";}
+function scheduleCloudSave(){if(!cloudReady||!cloudUser||!cloudClient)return;clearTimeout(cloudTimer);cloudStatus="等待同步";updateCloudButton();cloudTimer=setTimeout(pushCloudState,700);}
+async function pushCloudState(){if(!cloudReady||!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {error}=await cloudClient.from("user_boards").upsert({user_id:cloudUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:"user_id"});cloudStatus=error?"同步失败":"已同步";updateCloudButton();if(error)console.error("Cloud sync failed",error.message);}
+async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
+async function initCloud(){if(!window.supabase?.createClient){cloudStatus="云服务未加载";updateCloudButton();return;}cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);const {data}=await cloudClient.auth.getSession();cloudUser=data.session?.user||null;updateCloudButton();if(cloudUser)await loadCloudState();cloudClient.auth.onAuthStateChange(async(_event,session)=>{cloudUser=session?.user||null;cloudReady=false;updateCloudButton();if(cloudUser)await loadCloudState();});}
+function openCloudAccount(){if(cloudUser){$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>云端同步</h2><p>${escapeHtml(cloudUser.email||"")} · ${cloudStatus}</p></div><div class="cloud-actions"><button type="button" data-cloud-sync>立即同步</button><button type="button" class="secondary" data-cloud-signout>退出登录</button></div>`;}else{$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>登录同步</h2><p>使用同一个邮箱账号，即可在电脑和手机之间同步看板。</p></div><div class="cloud-form"><label><span>邮箱</span><input id="cloudEmail" type="email" autocomplete="email" placeholder="your@email.com"></label><label><span>密码</span><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="至少 6 位密码"></label><div><button type="button" data-cloud-signin>登录</button><button type="button" class="secondary" data-cloud-signup>注册</button></div><small id="cloudMessage"></small></div>`;}if(!$("#modal").open)$("#modal").showModal();}
+async function cloudAuth(mode){const email=$("#cloudEmail").value.trim(),password=$("#cloudPassword").value,message=$("#cloudMessage");if(!email||password.length<6){message.textContent="请输入有效邮箱和至少 6 位密码";return;}message.textContent="处理中…";const result=mode==="signup"?await cloudClient.auth.signUp({email,password}):await cloudClient.auth.signInWithPassword({email,password});if(result.error){message.textContent=result.error.message;return;}if(mode==="signup"&&!result.data.session){message.textContent="注册成功，请检查邮箱确认后再登录。";}else{$("#modal").close();}}
 function localDateISO(date){const d=new Date(date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return localDateISO(d);}
 function occursOn(todo,date){
@@ -203,6 +213,11 @@ function openNewProject(){
 }
 
 document.addEventListener("click", e => {
+  if(e.target.closest("#cloudAccount")){openCloudAccount();return;}
+  if(e.target.matches("[data-cloud-signin]")){cloudAuth("signin");return;}
+  if(e.target.matches("[data-cloud-signup]")){cloudAuth("signup");return;}
+  if(e.target.matches("[data-cloud-sync]")){pushCloudState();return;}
+  if(e.target.matches("[data-cloud-signout]")){cloudClient?.auth.signOut();cloudUser=null;cloudReady=false;cloudStatus="本机保存";updateCloudButton();$("#modal").close();return;}
   const nav=e.target.closest(".nav-item");
   if(nav){
     document.querySelectorAll(".nav-item").forEach(x=>x.classList.toggle("active",x===nav));
@@ -335,3 +350,4 @@ document.addEventListener("pointerup", () => {
 
 $("#modal").addEventListener("click", e => { if(e.target===$("#modal")) $("#modal").close(); });
 render();
+initCloud();
