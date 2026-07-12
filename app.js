@@ -82,7 +82,7 @@ function occursOn(todo,date){
 function render() {
   const steps = allSteps().filter(x=>occursOn(x,state.viewDate));
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
-  const scheduledCount = steps.filter(x => x.status === 1 && (x.scheduledDate || x.due)).length;
+  const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x)).length;
   $("#dateLabel").innerHTML=`<button data-date-shift="-1" aria-label="前一天">‹</button><input id="calendarDate" type="date" value="${state.viewDate}"><button data-date-shift="1" aria-label="后一天">›</button><button data-date-today>今天</button>`;
   $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = counts[2];
   $("#sideDone").textContent = counts[2]; $("#sideDoing").textContent = counts[1];
@@ -111,12 +111,16 @@ function renderTimeline(steps) {
 function formatEndTime(start,duration){ const total=Number(start.slice(0,2))*60+Number(start.slice(3))+duration*60; return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`; }
 
 function taskDate(todo){return todo.due?.slice(0,10)||todo.scheduledDate||"";}
-function isTaskScheduled(todo){return Boolean(taskDate(todo));}
+// 只有设置了具体执行时间、真正进入时间轴，才算“已安排”。
+function isTaskScheduled(todo){return Boolean(todo.scheduledHour||(todo.due?.includes("T")&&todo.due.slice(11,16)));}
 function isTaskOverdue(todo,date=state.viewDate){
   if(todo.status!==1||!isTaskScheduled(todo))return false;
   const dueDate=taskDate(todo),today=localDateISO(new Date());
-  if(dueDate<date)return true;
-  if(date!==today||dueDate!==today)return false;
+  const repeating=todo.repeat&&todo.repeat!=="none";
+  // 重复任务按当天生成新一轮，不把上一轮的日期继承为逾期。
+  if(!repeating&&dueDate<date)return true;
+  if(date!==today)return false;
+  if(!repeating&&dueDate!==today)return false;
   const time=todo.due?.includes("T")?todo.due.slice(11,16):todo.scheduledHour;
   if(!time)return false;
   const now=new Date(),current=now.getHours()*60+now.getMinutes();
