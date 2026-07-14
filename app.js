@@ -36,7 +36,8 @@ state.quick.forEach(q=>{if(!q.repeat)q.repeat="none";if(!q.notes)q.notes="";if(!
 state.projects.forEach(p=>p.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];}));
 state.areas.forEach(a=>a.tasks.forEach(t=>t.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];})));
 state.quick.forEach(normalizeSubtasks);state.projects.forEach(p=>p.steps.forEach(normalizeSubtasks));state.areas.forEach(a=>a.tasks.forEach(t=>t.steps.forEach(normalizeSubtasks)));
-if(!state.viewDate)state.viewDate=localDateISO(new Date());
+// 每次打开页面默认回到当天；用户本次使用期间仍可自由切换日期。
+state.viewDate=localDateISO(new Date());
 localStorage.setItem(KEY, JSON.stringify(state));
 const $ = s => document.querySelector(s);
 const save = () => { localStorage.setItem(KEY, JSON.stringify(state)); render(); scheduleCloudSave(); };
@@ -62,7 +63,7 @@ function normalizeSubtasks(item){item.subtasks=(item.subtasks||[]).map((s,i)=>ty
 function updateCloudButton(){const button=$("#cloudAccount");if(!button)return;button.classList.toggle("connected",!!cloudUser);button.classList.toggle("syncing",cloudStatus==="同步中");button.querySelector("span").textContent=cloudUser?`${cloudStatus} · ${cloudUser.email||"已登录"}`:"登录并同步";}
 function scheduleCloudSave(){if(!cloudReady||!cloudUser||!cloudClient)return;clearTimeout(cloudTimer);cloudStatus="等待同步";updateCloudButton();cloudTimer=setTimeout(pushCloudState,700);}
 async function pushCloudState(){if(!cloudReady||!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {error}=await cloudClient.from("user_boards").upsert({user_id:cloudUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:"user_id"});cloudStatus=error?"同步失败":"已同步";updateCloudButton();if(error)console.error("Cloud sync failed",error.message);}
-async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
+async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;if(!Array.isArray(state.activityLog))state.activityLog=[];if(!Array.isArray(state.todoOrder))state.todoOrder=[];state.viewDate=localDateISO(new Date());timelineInitialized=false;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
 async function initCloud(){if(!window.supabase?.createClient){cloudStatus="云服务未加载";updateCloudButton();return;}cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);const {data}=await cloudClient.auth.getSession();cloudUser=data.session?.user||null;updateCloudButton();if(cloudUser)await loadCloudState();cloudClient.auth.onAuthStateChange(async(_event,session)=>{cloudUser=session?.user||null;cloudReady=false;updateCloudButton();if(cloudUser)await loadCloudState();});}
 function openCloudAccount(){if(cloudUser){$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>云端同步</h2><p>${escapeHtml(cloudUser.email||"")} · ${cloudStatus}</p></div><div class="cloud-actions"><button type="button" data-cloud-sync>立即同步</button><button type="button" class="secondary" data-cloud-signout>退出登录</button></div>`;}else{$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>登录同步</h2><p>使用同一个邮箱账号，即可在电脑和手机之间同步看板。</p></div><div class="cloud-form"><label><span>邮箱</span><input id="cloudEmail" type="email" autocomplete="email" placeholder="your@email.com"></label><label><span>密码</span><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="至少 6 位密码"></label><div><button type="button" data-cloud-signin>登录</button><button type="button" class="secondary" data-cloud-signup>注册</button></div><small id="cloudMessage"></small></div>`;}if(!$("#modal").open)$("#modal").showModal();}
 async function cloudAuth(mode){const email=$("#cloudEmail").value.trim(),password=$("#cloudPassword").value,message=$("#cloudMessage");if(!email||password.length<6){message.textContent="请输入有效邮箱和至少 6 位密码";return;}message.textContent="处理中…";const result=mode==="signup"?await cloudClient.auth.signUp({email,password}):await cloudClient.auth.signInWithPassword({email,password});if(result.error){message.textContent=result.error.message;return;}if(mode==="signup"&&!result.data.session){message.textContent="注册成功，请检查邮箱确认后再登录。";}else{$("#modal").close();}}
@@ -87,9 +88,10 @@ function render() {
   const steps = allSteps().filter(x=>occursOn(x,state.viewDate));
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
   const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x)).length;
+  const completedCount = state.activityLog.filter(x=>x.date===state.viewDate).length;
   $("#dateLabel").innerHTML=`<button data-date-shift="-1" aria-label="前一天">‹</button><input id="calendarDate" type="date" value="${state.viewDate}"><button data-date-shift="1" aria-label="后一天">›</button><button data-date-today>今天</button>`;
-  $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = counts[2];
-  $("#sideDone").textContent = counts[2]; $("#sideDoing").textContent = counts[1];
+  $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = completedCount;
+  $("#sideDone").textContent = completedCount; $("#sideDoing").textContent = counts[1];
   $("#loadTime").textContent = `${counts[1]} 项进行中`;
   const isToday=state.viewDate===localDateISO(new Date());
   $(".focus-panel h2").textContent = isToday?"今日待办":"当日待办";
@@ -179,8 +181,19 @@ function completeTodo(key){
   const todo=sourceItem(key);if(!todo)return;
   const date=state.viewDate||localDateISO(new Date());
   if(todo.repeat&&todo.repeat!=="none"){if(!Array.isArray(todo.completions))todo.completions=[];if(!todo.completions.includes(date))todo.completions.push(date);}else todo.status=2;
+  if(!Array.isArray(state.activityLog))state.activityLog=[];
   if(!state.activityLog.some(x=>x.key===key&&x.date===date))state.activityLog.push({id:`log${Date.now()}`,key,date,text:todo.text||"完成任务",area:actionContext(key).area,completedAt:new Date().toISOString()});
-  save();
+  // 先持久化，再播放清晰的完成反馈，最后统一刷新待办与时间轴。
+  localStorage.setItem(KEY,JSON.stringify(state));scheduleCloudSave();
+  const remaining=allSteps().filter(x=>occursOn(x,date)&&x.status===1);
+  $("#statDoing").textContent=remaining.length;
+  $("#statScheduled").textContent=remaining.filter(isTaskScheduled).length;
+  $("#statDone").textContent=state.activityLog.filter(x=>x.date===date).length;
+  $("#sideDoing").textContent=remaining.length;$("#sideDone").textContent=state.activityLog.filter(x=>x.date===date).length;
+  $("#loadTime").textContent=`${remaining.length} 项进行中`;
+  const cards=[...document.querySelectorAll("[data-todo-key]")].filter(el=>el.dataset.todoKey===key);
+  cards.forEach(el=>el.classList.add("completing"));
+  setTimeout(render,520);
 }
 
 function cycleStep(id) {
