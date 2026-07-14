@@ -22,6 +22,7 @@ const defaults = {
 
 let state;
 let timelineInitialized=false;
+let timelineClockTimer=null;
 try { state = JSON.parse(localStorage.getItem(KEY)) || structuredClone(defaults); } catch { state = structuredClone(defaults); }
 state.areas.forEach(a => { if (a.id === "life") a.id = "admin"; if (a.id === "admin") a.name = "Adimin"; });
 state.projects.forEach(p => { if (p.area === "life") p.area = "admin"; });
@@ -110,8 +111,29 @@ function render() {
 function renderTimeline(steps) {
   const active = steps.filter(x => x.status === 1 && x.scheduledHour);
   const hours = Array.from({length:24},(_,hour)=>`${String(hour).padStart(2,"0")}:00`);
-  $("#timeline").innerHTML = hours.map(h => { const item=active.find(x=>x.scheduledHour===h), duration=item?.duration||1; return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small></span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`; }).join("");
+  $("#timeline").innerHTML = hours.map(h => {
+    const item=active.find(x=>x.scheduledHour===h),duration=item?.duration||1,timing=item?timelineTaskTiming(h,duration):{className:"",label:""};
+    const note=item?.notes?`<small class="timeline-note">${escapeHtml(item.notes)}</small>`:"";
+    return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task ${timing.className}" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}${timing.label?`<em class="timeline-status">${timing.label}</em>`:""}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small>${note}</span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`;
+  }).join("")+`<div id="nowMarker" class="now-marker" hidden><time></time><i></i></div>`;
+  updateNowMarker();clearInterval(timelineClockTimer);timelineClockTimer=setInterval(()=>{updateNowMarker();if(state.viewDate===localDateISO(new Date()))renderTimeline(allSteps().filter(x=>occursOn(x,state.viewDate)));},60000);
   if(!timelineInitialized){const now=new Date(),isToday=state.viewDate===localDateISO(now),position=isToday?(now.getHours()+now.getMinutes()/60)*TIMELINE_HOUR_HEIGHT-160:8*TIMELINE_HOUR_HEIGHT;$("#timeline").scrollTop=Math.max(0,position);timelineInitialized=true;}
+}
+
+function timelineTaskTiming(start,duration){
+  if(state.viewDate!==localDateISO(new Date()))return {className:"",label:""};
+  const now=new Date(),current=now.getHours()*60+now.getMinutes(),begin=Number(start.slice(0,2))*60+Number(start.slice(3)),end=begin+duration*60;
+  if(current>end)return {className:"timeline-overdue",label:"已超时"};
+  if(current>=begin&&end-current<=30)return {className:"timeline-soon",label:"即将结束"};
+  if(current>=begin)return {className:"timeline-active",label:"进行中"};
+  if(begin-current<=30&&begin-current>=0)return {className:"timeline-upcoming",label:"即将开始"};
+  return {className:"",label:""};
+}
+
+function updateNowMarker(){
+  const marker=$("#nowMarker");if(!marker)return;
+  const now=new Date(),isToday=state.viewDate===localDateISO(now);marker.hidden=!isToday;if(!isToday)return;
+  const minutes=now.getHours()*60+now.getMinutes(),hourHeight=$("#timeline .time-row")?.getBoundingClientRect().height||TIMELINE_HOUR_HEIGHT;marker.style.top=`${minutes/60*hourHeight}px`;marker.querySelector("time").textContent=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 }
 
 function formatEndTime(start,duration){ const total=Number(start.slice(0,2))*60+Number(start.slice(3))+duration*60; return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`; }
