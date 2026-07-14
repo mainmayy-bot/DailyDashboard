@@ -31,6 +31,7 @@ state.areas.forEach(a=>a.tasks.forEach(t=>{if(t.status===2)t.status=1;}));
 state.areas.forEach(a => a.tasks.forEach(t => { if (!Array.isArray(t.steps)) t.steps = []; }));
 if (!Array.isArray(state.projectOrder)) state.projectOrder = [];
 if (!Array.isArray(state.todoOrder)) state.todoOrder = [];
+if (!Array.isArray(state.activityLog)) state.activityLog = [];
 state.quick.forEach(q=>{if(!q.repeat)q.repeat="none";if(!q.notes)q.notes="";if(!Array.isArray(q.subtasks))q.subtasks=[];});
 state.projects.forEach(p=>p.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];}));
 state.areas.forEach(a=>a.tasks.forEach(t=>t.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];})));
@@ -45,6 +46,9 @@ const domainStatusText = s => ["计划中", "推进中"][s];
 const allSteps = () => state.projects.flatMap(p=>p.steps.map(s=>({...s,project:p.title,area:p.area,sourceKey:`pstep:${s.id}`})))
   .concat(state.areas.flatMap(a=>a.tasks.flatMap(t=>t.steps.map(s=>({...s,project:t.text,area:a.id,sourceKey:`astep:${s.id}`})))))
   .concat(state.quick.map(q => ({...q, project:q.sourceProject||"独立待办", sourceKey:`quick:${q.id}`})));
+// 将此前重复任务已经保存的完成日期补入行动记录，旧努力也尽量保留下来。
+allSteps().forEach(item=>(item.completions||[]).forEach(date=>{if(!state.activityLog.some(x=>x.key===item.sourceKey&&x.date===date))state.activityLog.push({id:`legacy-${item.sourceKey}-${date}`,key:item.sourceKey,date,text:item.text||"完成任务",area:item.area,completedAt:`${date}T23:59:00`});}));
+localStorage.setItem(KEY, JSON.stringify(state));
 
 function sourceItem(key) {
   const [type,...rest]=String(key).split(":"); const id=rest.join(":");
@@ -104,7 +108,7 @@ function render() {
 function renderTimeline(steps) {
   const active = steps.filter(x => x.status === 1 && x.scheduledHour);
   const hours = Array.from({length:24},(_,hour)=>`${String(hour).padStart(2,"0")}:00`);
-  $("#timeline").innerHTML = hours.map(h => { const item=active.find(x=>x.scheduledHour===h), duration=item?.duration||1; return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small></span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`; }).join("");
+  $("#timeline").innerHTML = hours.map(h => { const item=active.find(x=>x.scheduledHour===h), duration=item?.duration||1; return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small></span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`; }).join("");
   if(!timelineInitialized){const now=new Date(),isToday=state.viewDate===localDateISO(now),position=isToday?(now.getHours()+now.getMinutes()/60)*TIMELINE_HOUR_HEIGHT-160:8*TIMELINE_HOUR_HEIGHT;$("#timeline").scrollTop=Math.max(0,position);timelineInitialized=true;}
 }
 
@@ -163,10 +167,20 @@ function renderAreas() {
 }
 
 function renderSignals(steps) {
-  const projectAverage = state.projects.length ? Math.round(state.projects.reduce((n,p)=>n+pct(p.steps),0)/state.projects.length) : 0;
-  const areaAverage = state.areas.length ? Math.round(state.areas.reduce((n,a)=>n+(a.tasks.length?(a.tasks.filter(t=>t.status>0).length/a.tasks.length*100):0),0)/state.areas.length) : 0;
-  const rows = [["今",`${steps.filter(x=>x.status===2).length}`,"今日完成"],["项",`${projectAverage}%`,"项目平均进度"],["域",`${areaAverage}%`,"领域活跃度"],["开",`${steps.filter(x=>x.status<2).length}`,"开放任务"]];
-  $("#signals").innerHTML = rows.map(r=>`<div><i>${r[0]}</i><span><b>${r[1]}</b><small>${r[2]}</small></span></div>`).join("");
+  const projectAverage=state.projects.length?Math.round(state.projects.reduce((n,p)=>n+pct(p.steps),0)/state.projects.length):0;
+  const areaAverage=state.areas.length?Math.round(state.areas.reduce((n,a)=>n+(a.tasks.length?(a.tasks.filter(t=>t.status>0).length/a.tasks.length*100):0),0)/state.areas.length):0;
+  const today=localDateISO(new Date()),todayDone=state.activityLog.filter(x=>x.date===today).length;
+  const rows=[["今",todayDone,"今日完成"],["项",`${projectAverage}%`,"项目平均进度"],["域",`${areaAverage}%`,"领域活跃度"],["开",steps.filter(x=>x.status<2).length,"开放任务"]];
+  $(".signals-panel h2").textContent="数据概览";$(".signals-panel header span").textContent="自动汇总";
+  $("#signals").innerHTML=rows.map(r=>`<div><i>${r[0]}</i><span><b>${r[1]}</b><small>${r[2]}</small></span></div>`).join("");
+}
+
+function completeTodo(key){
+  const todo=sourceItem(key);if(!todo)return;
+  const date=state.viewDate||localDateISO(new Date());
+  if(todo.repeat&&todo.repeat!=="none"){if(!Array.isArray(todo.completions))todo.completions=[];if(!todo.completions.includes(date))todo.completions.push(date);}else todo.status=2;
+  if(!state.activityLog.some(x=>x.key===key&&x.date===date))state.activityLog.push({id:`log${Date.now()}`,key,date,text:todo.text||"完成任务",area:actionContext(key).area,completedAt:new Date().toISOString()});
+  save();
 }
 
 function cycleStep(id) {
@@ -265,7 +279,7 @@ document.addEventListener("click", e => {
   if(e.target.matches("[data-add-subtask-row]")){const input=$("#newSubtaskInput"),text=input.value.trim();if(text){$("#todoSubtaskRows").insertAdjacentHTML("beforeend",subtaskEditorRow({id:`sub${Date.now()}`,text,done:false}));input.value="";input.focus();}return;}
   if(e.target.matches("[data-remove-subtask-row]")){e.target.closest("[data-subtask-row]")?.remove();return;}
   const subtask=e.target.closest("[data-toggle-subtask]");if(subtask){const todo=sourceItem(subtask.dataset.toggleSubtask);const item=todo?.subtasks.find(s=>String(s.id)===String(subtask.dataset.subtaskId));if(item){item.done=!item.done;save();}return;}
-  if(e.target.matches("[data-complete-action]")){const todo=sourceItem(e.target.dataset.completeAction);if(todo){if(todo.repeat&&todo.repeat!=="none"){if(!Array.isArray(todo.completions))todo.completions=[];if(!todo.completions.includes(state.viewDate))todo.completions.push(state.viewDate);}else{todo.status=2;}save();}return;}
+  const completeAction=e.target.closest("[data-complete-action]");if(completeAction){completeTodo(completeAction.dataset.completeAction);return;}
   if(e.target.matches("[data-save-action]")){const title=$("#todoTitle").value.trim();if(!title)return;let key=e.target.dataset.saveAction,todo=key?sourceItem(key):null;if(!todo){todo={id:"q"+Date.now(),status:1,area:e.target.dataset.actionArea||"admin",sourceProject:e.target.dataset.actionProject||"独立待办",subtasks:[]};state.quick.push(todo);key=`quick:${todo.id}`;}todo.text=title;const date=$("#todoDate").value,time=$("#todoTime").value;if(date){todo.due=time?`${date}T${time}`:date;todo.scheduledDate=date;}else{delete todo.due;delete todo.scheduledDate;}if(time){todo.scheduledHour=`${time.slice(0,2)}:00`;}else{delete todo.scheduledHour;delete todo.duration;}todo.repeat=$("#todoRepeat").value;todo.notes=$("#todoNotes").value.trim();const pending=$("#newSubtaskInput")?.value.trim();if(pending)$("#todoSubtaskRows").insertAdjacentHTML("beforeend",subtaskEditorRow({id:`sub${Date.now()}`,text:pending,done:false}));todo.subtasks=[...document.querySelectorAll("#todoSubtaskRows [data-subtask-row]")].map(row=>({id:row.dataset.subtaskId,text:row.querySelector("[data-subtask-text]").value.trim(),done:row.dataset.subtaskDone==="1"})).filter(s=>s.text);save();$("#modal").close();return;}
   if(e.target.matches("[data-delete-todo]")){ const key=e.target.dataset.deleteTodo; const [type,...parts]=key.split(":"); const id=parts.join(":"); if(type==="pstep") state.projects.forEach(p=>p.steps=p.steps.filter(s=>String(s.id)!==id)); if(type==="atask") state.areas.forEach(a=>a.tasks=a.tasks.filter(t=>String(t.id)!==id)); if(type==="astep") { const found=findAreaProjectStep(id); if(found) found.task.steps=found.task.steps.filter(s=>String(s.id)!==id); } if(type==="quick") state.quick=state.quick.filter(q=>String(q.id)!==id); state.todoOrder=state.todoOrder.filter(k=>k!==key); save(); return; }
   if(e.target.matches("[data-area-step]")){ const id=e.target.dataset.areaStep; const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(id)); if(t){t.status=(t.status+1)%2;save(); const area=state.areas.find(a=>a.tasks.includes(t)); openArea(area.id);} return; }
