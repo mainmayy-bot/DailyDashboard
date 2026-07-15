@@ -2,7 +2,7 @@ const KEY = "life-action-board-v2";
 const SUPABASE_URL = "https://xmvvcebjglyyttlceicw.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nEHf0fkntvsC_pzDyXqIUw_8vY_fS20";
 const colors = { fortune: "#d4a83e", beauty: "#c7665b", soul: "#6f9673", admin: "#668bb3" };
-const TIMELINE_HOUR_HEIGHT = 48;
+const TIMELINE_HOUR_HEIGHT = 64;
 let cloudClient=null, cloudUser=null, cloudReady=false, cloudTimer=null, cloudStatus="本机保存";
 const defaults = {
   areas: [
@@ -100,6 +100,8 @@ function render() {
   $(".projects-panel h2").textContent = "项目管理";
   $("[data-add='quick']").textContent = "＋ 添加待办";
   $("#sideAreas").innerHTML = state.areas.map(a => `<p><i class="dot" style="background:${colors[a.id]}"></i>${a.name}<b>${a.tasks.filter(t=>t.status===1).length}</b></p>`).join("");
+  const sideProjects=state.projects.map(p=>({key:`p:${p.id}`,name:p.title,area:p.area,count:p.steps.filter(s=>s.status===1).length})).concat(state.areas.flatMap(a=>a.tasks.filter(t=>t.status===1).map(t=>({key:`a:${t.id}`,name:t.text,area:a.id,count:t.steps.filter(s=>s.status===1).length}))));
+  $("#sideProjects").innerHTML=sideProjects.length?sideProjects.map(p=>`<button type="button" data-side-project="${p.key}" title="${escapeHtml(p.name)}"><i class="dot" style="background:${colors[p.area]||colors.admin}"></i><span>${escapeHtml(p.name)}</span><b>${p.count}</b></button>`).join(""):`<small>暂无项目</small>`;
   $(".areas-panel h2").textContent="领域仪表盘";
   $(".areas-panel header small").textContent="管理长期方向与持续投入";
   $(".areas-panel header>span").textContent="关注推进状态，而非一次性完成";
@@ -298,6 +300,8 @@ document.addEventListener("click", e => {
     document.querySelector(targets[nav.dataset.view])?.scrollIntoView({behavior:"smooth",block:"start"});
     return;
   }
+  const sideProject=e.target.closest("[data-side-project]");
+  if(sideProject){const card=[...document.querySelectorAll("[data-order-key]")].find(x=>x.dataset.orderKey===sideProject.dataset.sideProject);if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.classList.add("sidebar-highlight");setTimeout(()=>card.classList.remove("sidebar-highlight"),1100);}return;}
   if(e.target.matches("[data-date-shift]")){state.viewDate=shiftDate(state.viewDate,Number(e.target.dataset.dateShift));timelineInitialized=false;save();return;}
   if(e.target.matches("[data-date-today]")){state.viewDate=localDateISO(new Date());timelineInitialized=false;save();return;}
   const step=e.target.closest("[data-step]"); if(step) return cycleStep(step.dataset.step);
