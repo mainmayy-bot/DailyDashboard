@@ -126,7 +126,7 @@ function timelineTaskTiming(start,duration){
   if(state.viewDate!==localDateISO(new Date()))return {className:"",label:""};
   const now=new Date(),current=now.getHours()*60+now.getMinutes(),begin=Number(start.slice(0,2))*60+Number(start.slice(3)),end=begin+duration*60;
   if(current>end)return {className:"timeline-overdue",label:"已超时"};
-  if(current>=begin&&end-current<=30)return {className:"timeline-soon",label:"即将结束"};
+  if(current>=begin&&end-current<=30)return {className:"timeline-active",label:"进行中"};
   if(current>=begin)return {className:"timeline-active",label:"进行中"};
   if(begin-current<=30&&begin-current>=0)return {className:"timeline-upcoming",label:"即将开始"};
   return {className:"",label:""};
