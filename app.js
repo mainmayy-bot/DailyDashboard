@@ -72,11 +72,12 @@ function localDateISO(date){const d=new Date(date);return `${d.getFullYear()}-${
 function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return localDateISO(d);}
 function occursOn(todo,date){
   if(todo.status===2)return false;
-  const base=todo.due?.slice(0,10)||todo.scheduledDate||localDateISO(new Date());
+  const today=localDateISO(new Date());
+  const base=todo.due?.slice(0,10)||todo.scheduledDate||today;
   if(date<base)return false;
   if((todo.completions||[]).includes(date))return false;
-  // 单次任务在到期日之后继续出现，直到用户真正完成它。
-  if(!todo.repeat||todo.repeat==="none")return date>=base;
+  // 单次任务只在原定日期出现；只有原定日期真正过完后，才作为遗留待办进入后续日期。
+  if(!todo.repeat||todo.repeat==="none")return date===base||(base<today&&date>base);
   const d=new Date(`${date}T12:00:00`),b=new Date(`${base}T12:00:00`);
   if(todo.repeat==="daily")return true;
   if(todo.repeat==="weekdays")return d.getDay()>0&&d.getDay()<6;
@@ -88,7 +89,7 @@ function occursOn(todo,date){
 function render() {
   const steps = allSteps().filter(x=>occursOn(x,state.viewDate));
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
-  const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x)).length;
+  const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x,state.viewDate)).length;
   const completedCount = state.activityLog.filter(x=>x.date===state.viewDate).length;
   $("#dateLabel").innerHTML=`<button data-date-shift="-1" aria-label="前一天">‹</button><input id="calendarDate" type="date" value="${state.viewDate}"><button data-date-shift="1" aria-label="后一天">›</button><button data-date-today>今天</button>`;
   $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = completedCount;
@@ -111,12 +112,17 @@ function render() {
 }
 
 function renderTimeline(steps) {
-  const active = steps.filter(x => x.status === 1 && x.scheduledHour);
+  const active = steps.filter(x => x.status === 1 && x.scheduledHour && isTaskScheduled(x,state.viewDate));
+  const layout=new Map();
+  const intervals=active.map(item=>{const start=Number(item.scheduledHour.slice(0,2))*60+Number(item.scheduledHour.slice(3));return {item,start,end:start+(item.duration||1)*60,col:0};}).sort((a,b)=>a.start-b.start||a.end-b.end);
+  let cluster=[];
+  const finishCluster=()=>{if(!cluster.length)return;const lanes=[];cluster.forEach(entry=>{let col=lanes.findIndex(end=>end<=entry.start);if(col<0)col=lanes.length;lanes[col]=entry.end;entry.col=col;});const cols=Math.max(1,lanes.length);cluster.forEach(entry=>layout.set(entry.item.sourceKey,{col:entry.col,cols}));cluster=[];};
+  intervals.forEach(entry=>{const clusterEnd=cluster.length?Math.max(...cluster.map(x=>x.end)):-1;if(cluster.length&&entry.start>=clusterEnd)finishCluster();cluster.push(entry);});finishCluster();
   const hours = Array.from({length:24},(_,hour)=>`${String(hour).padStart(2,"0")}:00`);
   $("#timeline").innerHTML = hours.map(h => {
-    const item=active.find(x=>x.scheduledHour===h),duration=item?.duration||1,timing=item?timelineTaskTiming(h,duration):{className:"",label:""};
-    const note=item?.notes?`<small class="timeline-note">${escapeHtml(item.notes)}</small>`:"";
-    return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task ${timing.className} ${item.notes?"has-note":"no-note"}" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}${timing.label?`<em class="timeline-status">${timing.label}</em>`:""}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small>${note}</span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`;
+    const items=active.filter(x=>x.scheduledHour===h);
+    const cards=items.map(item=>{const duration=item.duration||1,timing=timelineTaskTiming(h,duration),note=item.notes?`<small class="timeline-note">${escapeHtml(item.notes)}</small>`:"",lane=layout.get(item.sourceKey)||{col:0,cols:1};return `<article class="time-task parallel ${timing.className} ${item.notes?"has-note":"no-note"}" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration};--lane-left:${lane.col/lane.cols*100}%;--lane-width:${100/lane.cols}%" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}${timing.label?`<em class="timeline-status">${timing.label}</em>`:""}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small>${note}</span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>`;}).join("");
+    return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${cards?`<div class="timeline-lanes">${cards}</div>`:`<span class="drop-hint">拖入待办</span>`}</div>`;
   }).join("")+`<div id="nowMarker" class="now-marker" hidden><time></time><i></i></div>`;
   updateNowMarker();clearInterval(timelineClockTimer);timelineClockTimer=setInterval(()=>{updateNowMarker();if(state.viewDate===localDateISO(new Date()))renderTimeline(allSteps().filter(x=>occursOn(x,state.viewDate)));},60000);
   if(!timelineInitialized){const now=new Date(),isToday=state.viewDate===localDateISO(now),position=isToday?(now.getHours()+now.getMinutes()/60)*TIMELINE_HOUR_HEIGHT-160:8*TIMELINE_HOUR_HEIGHT;$("#timeline").scrollTop=Math.max(0,position);timelineInitialized=true;}
@@ -141,14 +147,15 @@ function updateNowMarker(){
 function formatEndTime(start,duration){ const total=Number(start.slice(0,2))*60+Number(start.slice(3))+duration*60; return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`; }
 
 function taskDate(todo){return todo.due?.slice(0,10)||todo.scheduledDate||"";}
+function isCarriedOver(todo,date=state.viewDate){const base=taskDate(todo),today=localDateISO(new Date());return (!todo.repeat||todo.repeat==="none")&&Boolean(base)&&base<today&&date>base;}
 // 只有设置了具体执行时间、真正进入时间轴，才算“已安排”。
-function isTaskScheduled(todo){return Boolean(todo.scheduledHour||(todo.due?.includes("T")&&todo.due.slice(11,16)));}
+function isTaskScheduled(todo,date=state.viewDate){if(isCarriedOver(todo,date))return false;return Boolean(todo.scheduledHour||(todo.due?.includes("T")&&todo.due.slice(11,16)));}
 function isTaskOverdue(todo,date=state.viewDate){
-  if(todo.status!==1||!isTaskScheduled(todo))return false;
+  if(todo.status!==1)return false;
+  if(isCarriedOver(todo,date))return true;
+  if(!isTaskScheduled(todo,date))return false;
   const dueDate=taskDate(todo),today=localDateISO(new Date());
   const repeating=todo.repeat&&todo.repeat!=="none";
-  // 重复任务按当天生成新一轮，不把上一轮的日期继承为逾期。
-  if(!repeating&&dueDate<date)return true;
   if(date!==today)return false;
   if(!repeating&&dueDate!==today)return false;
   const time=todo.due?.includes("T")?todo.due.slice(11,16):todo.scheduledHour;
@@ -163,13 +170,13 @@ function renderFocus(steps) {
   const doing = steps.filter(x => x.status === 1).sort((a,b)=>(rank.get(a.sourceKey)??9999)-(rank.get(b.sourceKey)??9999));
   state.todoOrder=[...new Set([...doing.map(x=>x.sourceKey),...state.todoOrder])];
   $("#focusList").innerHTML = doing.length ? doing.map(x => {
-    const overdue=isTaskOverdue(x),unscheduled=!isTaskScheduled(x);
+    const overdue=isTaskOverdue(x),unscheduled=!isTaskScheduled(x,state.viewDate);
     const alert=overdue?`<em class="todo-alert overdue-alert">! 已逾期</em>`:unscheduled?`<em class="todo-alert unscheduled-alert">待排期</em>`:"";
     return `<article class="focus-item todo-card ${overdue?"is-overdue":unscheduled?"is-unscheduled":""}" draggable="true" data-todo-key="${x.sourceKey}" style="--c:${colors[x.area] || colors.admin}"><div class="todo-card-top"><span class="todo-grip" title="拖拽排序或安排时间">⠿</span><button class="todo-check" data-complete-action="${x.sourceKey}" aria-label="完成待办"><i></i></button><button class="todo-main" data-edit-action="${x.sourceKey}"><span><span class="todo-title-line"><b>${escapeHtml(x.text)}</b>${alert}</span><small>${todoMeta(x)}</small></span></button><button class="todo-delete" data-delete-todo="${x.sourceKey}" aria-label="删除待办">×</button></div>${x.notes?`<button class="todo-note" data-edit-action="${x.sourceKey}"><i>备注</i><span>${escapeHtml(x.notes)}</span></button>`:""}${x.subtasks?.length?`<div class="todo-subtasks"><div class="todo-subtasks-head"><span>子任务</span><b>${x.subtasks.filter(s=>s.done).length}/${x.subtasks.length}</b></div>${x.subtasks.map(s=>`<button class="todo-subtask ${s.done?"done":""}" data-toggle-subtask="${x.sourceKey}" data-subtask-id="${s.id}"><i>${s.done?"✓":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div>`:""}</article>`;
   }).join("") : `<div class="empty">暂无今日行动</div>`;
 }
 
-function todoMeta(todo){const bits=[];bits.push(todo.project||todo.sourceProject||"独立待办");bits.push(todo.due?todo.due.replace("T"," "):todo.scheduledHour||"未安排时间");if(todo.repeat&&todo.repeat!=="none")bits.push({daily:"每天",weekdays:"工作日",weekly:"每周",monthly:"每月"}[todo.repeat]);if(todo.subtasks?.length)bits.push(`${todo.subtasks.filter(s=>s.done).length}/${todo.subtasks.length} 子任务`);return bits.join(" · ");}
+function todoMeta(todo){const bits=[];bits.push(todo.project||todo.sourceProject||"独立待办");if(isCarriedOver(todo,state.viewDate))bits.push(`原定 ${taskDate(todo)} · 待重新安排`);else bits.push(todo.due?todo.due.replace("T"," "):todo.scheduledHour||"未安排时间");if(todo.repeat&&todo.repeat!=="none")bits.push({daily:"每天",weekdays:"工作日",weekly:"每周",monthly:"每月"}[todo.repeat]);if(todo.subtasks?.length)bits.push(`${todo.subtasks.filter(s=>s.done).length}/${todo.subtasks.length} 子任务`);return bits.join(" · ");}
 
 
 function renderProjects() {
@@ -211,7 +218,7 @@ function completeTodo(key){
   localStorage.setItem(KEY,JSON.stringify(state));scheduleCloudSave();
   const remaining=allSteps().filter(x=>occursOn(x,date)&&x.status===1);
   $("#statDoing").textContent=remaining.length;
-  $("#statScheduled").textContent=remaining.filter(isTaskScheduled).length;
+  $("#statScheduled").textContent=remaining.filter(x=>isTaskScheduled(x,date)).length;
   $("#statDone").textContent=state.activityLog.filter(x=>x.date===date).length;
   $("#sideDoing").textContent=remaining.length;$("#sideDone").textContent=state.activityLog.filter(x=>x.date===date).length;
   $("#loadTime").textContent=`${remaining.length} 项进行中`;
@@ -229,7 +236,7 @@ function cycleStep(id) {
   if (changed) {
     save();
     const modalStep = document.querySelector(`#modal [data-step="${id}"]`);
-    if (modalStep) { modalStep.className=`status-pill s${changed.status}`; modalStep.textContent=statusText(changed.status); }
+    if (modalStep) { const project=state.projects.find(p=>p.steps.includes(changed)); if(project)openProject(project.id); }
   }
 }
 
@@ -241,7 +248,8 @@ function openArea(id) {
 
 function openProject(id) {
   const p=state.projects.find(x=>x.id===id);
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[p.area]}"><span>PROJECT</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(p.title)}" data-edit-project-name="${p.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-project="${p.id}">删除项目</button></div><p>名称和每一步都能直接编辑；拖动左侧把手调整顺序。</p></div><div class="modal-steps">${p.steps.map(s=>`<div class="modal-sort-item" draggable="true" data-modal-type="project" data-modal-parent="${p.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newStep" placeholder="拆解新的项目步骤"><button type="button" data-add-step="${id}">添加</button></div>`;
+  const doneCount=p.steps.filter(s=>s.status===2).length;
+  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[p.area]}"><span>PROJECT</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(p.title)}" data-edit-project-name="${p.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-project="${p.id}">删除项目</button></div><p>名称和每一步都能直接编辑；拖动左侧把手调整顺序。</p></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${p.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="project" data-modal-parent="${p.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newStep" placeholder="拆解新的项目步骤"><button type="button" data-add-step="${id}">添加</button></div>`;
   if (!$("#modal").open) $("#modal").showModal();
 }
 
@@ -249,7 +257,8 @@ function openAreaProject(taskId) {
   const area=state.areas.find(a=>a.tasks.some(t=>String(t.id)===String(taskId)));
   const task=area?.tasks.find(t=>String(t.id)===String(taskId));
   if (!task) return;
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[area.id]}"><span>${area.name} · FROM DASHBOARD</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(task.text)}" data-edit-area-project="${task.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-area-project="${task.id}">删除项目</button></div><p>可以修改标题、拆解步骤，并拖动左侧把手调整顺序。</p></div><div class="modal-steps">${task.steps.map(s=>`<div class="modal-sort-item" draggable="true" data-modal-type="areaProject" data-modal-parent="${task.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-area-project-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-area-project-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-area-project-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newAreaProjectStep" placeholder="拆解新的项目步骤"><button type="button" data-add-area-project-step="${task.id}">添加</button></div>`;
+  const doneCount=task.steps.filter(s=>s.status===2).length;
+  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[area.id]}"><span>${area.name} · FROM DASHBOARD</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(task.text)}" data-edit-area-project="${task.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-area-project="${task.id}">删除项目</button></div><p>可以修改标题、拆解步骤，并拖动左侧把手调整顺序。</p></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${task.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="areaProject" data-modal-parent="${task.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-area-project-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-area-project-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-area-project-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newAreaProjectStep" placeholder="拆解新的项目步骤"><button type="button" data-add-area-project-step="${task.id}">添加</button></div>`;
   if (!$("#modal").open) $("#modal").showModal();
 }
 
@@ -304,6 +313,8 @@ document.addEventListener("click", e => {
   if(sideProject){const card=[...document.querySelectorAll("[data-order-key]")].find(x=>x.dataset.orderKey===sideProject.dataset.sideProject);if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.classList.add("sidebar-highlight");setTimeout(()=>card.classList.remove("sidebar-highlight"),1100);}return;}
   if(e.target.matches("[data-date-shift]")){state.viewDate=shiftDate(state.viewDate,Number(e.target.dataset.dateShift));timelineInitialized=false;save();return;}
   if(e.target.matches("[data-date-today]")){state.viewDate=localDateISO(new Date());timelineInitialized=false;save();return;}
+  const completedToggle=e.target.closest("[data-toggle-completed]");
+  if(completedToggle){const list=completedToggle.nextElementSibling,expanded=completedToggle.getAttribute("aria-expanded")!=="true";completedToggle.setAttribute("aria-expanded",String(expanded));completedToggle.querySelector("i").textContent=expanded?"收起":"展开";list?.classList.toggle("show-completed",expanded);return;}
   const step=e.target.closest("[data-step]"); if(step) return cycleStep(step.dataset.step);
   const areaProjectStep=e.target.closest("[data-area-project-step]");
   if(areaProjectStep){ const found=findAreaProjectStep(areaProjectStep.dataset.areaProjectStep); if(found){found.step.status=(found.step.status+1)%3;save(); if($("#modal").open) openAreaProject(found.task.id);} return; }
@@ -388,7 +399,7 @@ document.addEventListener("drop", e => {
     return;
   }
   const hour=e.target.closest("[data-hour]");
-  if(hour&&draggedTodoKey){e.preventDefault();const item=sourceItem(draggedTodoKey);if(item){allSteps().filter(x=>occursOn(x,state.viewDate)&&x.scheduledHour===hour.dataset.hour&&x.sourceKey!==draggedTodoKey).forEach(x=>{const old=sourceItem(x.sourceKey);if(old)delete old.scheduledHour;});item.scheduledHour=hour.dataset.hour;item.scheduledDate=state.viewDate;item.due=`${state.viewDate}T${hour.dataset.hour}`;if(!item.duration)item.duration=1;draggedTodoKey="";save();}return;}
+  if(hour&&draggedTodoKey){e.preventDefault();const item=sourceItem(draggedTodoKey);if(item){item.scheduledHour=hour.dataset.hour;item.scheduledDate=state.viewDate;item.due=`${state.viewDate}T${hour.dataset.hour}`;if(!item.duration)item.duration=1;draggedTodoKey="";save();}return;}
   const todoTarget=e.target.closest("[data-todo-key]");
   if(todoTarget&&draggedTodoKey&&todoTarget.dataset.todoKey!==draggedTodoKey){e.preventDefault();const from=state.todoOrder.indexOf(draggedTodoKey);if(from>=0)state.todoOrder.splice(from,1);const to=state.todoOrder.indexOf(todoTarget.dataset.todoKey);state.todoOrder.splice(to<0?state.todoOrder.length:to,0,draggedTodoKey);draggedTodoKey="";save();return;}
   const target=e.target.closest("[data-order-key]");
