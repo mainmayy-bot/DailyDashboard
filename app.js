@@ -116,7 +116,7 @@ function renderTimeline(steps) {
   $("#timeline").innerHTML = hours.map(h => {
     const item=active.find(x=>x.scheduledHour===h),duration=item?.duration||1,timing=item?timelineTaskTiming(h,duration):{className:"",label:""};
     const note=item?.notes?`<small class="timeline-note">${escapeHtml(item.notes)}</small>`:"";
-    return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task ${timing.className}" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}${timing.label?`<em class="timeline-status">${timing.label}</em>`:""}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small>${note}</span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`;
+    return `<div class="time-row timeline-drop" data-hour="${h}"><time>${h}</time>${item ? `<article class="time-task ${timing.className} ${item.notes?"has-note":"no-note"}" draggable="true" data-todo-key="${item.sourceKey}" style="--c:${colors[item.area] || colors.admin};--duration:${duration}" data-timeline-key="${item.sourceKey}"><button class="timeline-complete" data-complete-action="${item.sourceKey}" aria-label="完成日程"><i></i></button><button class="timeline-task-main" data-edit-action="${item.sourceKey}"><i></i><span><b>${escapeHtml(item.text)}${timing.label?`<em class="timeline-status">${timing.label}</em>`:""}</b><small>${escapeHtml(item.project)} · ${h}–${formatEndTime(h,duration)} · ${duration}h</small>${note}</span></button><span class="resize-handle" data-resize-key="${item.sourceKey}" title="上下拖动调整时长"><i></i></span></article>` : `<span class="drop-hint">拖入待办</span>`}</div>`;
   }).join("")+`<div id="nowMarker" class="now-marker" hidden><time></time><i></i></div>`;
   updateNowMarker();clearInterval(timelineClockTimer);timelineClockTimer=setInterval(()=>{updateNowMarker();if(state.viewDate===localDateISO(new Date()))renderTimeline(allSteps().filter(x=>occursOn(x,state.viewDate)));},60000);
   if(!timelineInitialized){const now=new Date(),isToday=state.viewDate===localDateISO(now),position=isToday?(now.getHours()+now.getMinutes()/60)*TIMELINE_HOUR_HEIGHT-160:8*TIMELINE_HOUR_HEIGHT;$("#timeline").scrollTop=Math.max(0,position);timelineInitialized=true;}
@@ -426,5 +426,11 @@ document.addEventListener("pointerup", () => {
 });
 
 $("#modal").addEventListener("click", e => { if(e.target===$("#modal")) $("#modal").close(); });
+let sideScrollTimer;
+$("#sideProjects")?.addEventListener("scroll", e => {
+  e.currentTarget.classList.add("is-scrolling");
+  clearTimeout(sideScrollTimer);
+  sideScrollTimer=setTimeout(()=>e.currentTarget.classList.remove("is-scrolling"),650);
+},{passive:true});
 render();
 initCloud();
