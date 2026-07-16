@@ -93,7 +93,7 @@ function render() {
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
   const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x,state.viewDate)).length;
   const completedCount = state.activityLog.filter(x=>x.date===state.viewDate).length;
-  $("#dateLabel").innerHTML=`<span class="date-nav"><button class="date-arrow" data-date-shift="-1" aria-label="前一天">‹</button><label class="date-core"><input id="calendarDate" type="date" value="${state.viewDate}"><span class="date-weekday">${weekdayText(state.viewDate)}</span></label><button class="date-arrow" data-date-shift="1" aria-label="后一天">›</button><button class="date-today" data-date-today>今天</button></span>`;
+  $("#dateLabel").innerHTML=`<span class="date-nav"><button class="date-arrow" data-date-shift="-1" aria-label="前一天">‹</button><label class="date-core"><span class="date-display">${state.viewDate.replaceAll("-","/")} ${weekdayText(state.viewDate)}</span><input id="calendarDate" type="date" value="${state.viewDate}" aria-label="选择日期"></label><button class="date-arrow" data-date-shift="1" aria-label="后一天">›</button></span><button class="date-today" data-date-today>今天</button>`;
   $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = completedCount;
   $("#sideDone").textContent = completedCount; $("#sideDoing").textContent = counts[1];
   $("#loadTime").textContent = `${counts[1]} 项进行中`;
