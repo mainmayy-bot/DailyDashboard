@@ -32,6 +32,7 @@ state.areas.forEach(a=>a.tasks.forEach(t=>{if(t.status===2)t.status=1;}));
 state.areas.forEach(a => a.tasks.forEach(t => { if (!Array.isArray(t.steps)) t.steps = []; }));
 if (!Array.isArray(state.projectOrder)) state.projectOrder = [];
 if (!Array.isArray(state.todoOrder)) state.todoOrder = [];
+if (!["category","time","manual"].includes(state.todoSortMode)) state.todoSortMode = "manual";
 if (!Array.isArray(state.activityLog)) state.activityLog = [];
 state.quick.forEach(q=>{if(!q.repeat)q.repeat="none";if(!q.notes)q.notes="";if(!Array.isArray(q.subtasks))q.subtasks=[];});
 state.projects.forEach(p=>p.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];}));
@@ -64,12 +65,13 @@ function normalizeSubtasks(item){item.subtasks=(item.subtasks||[]).map((s,i)=>ty
 function updateCloudButton(){const button=$("#cloudAccount");if(!button)return;button.classList.toggle("connected",!!cloudUser);button.classList.toggle("syncing",cloudStatus==="同步中");button.querySelector("span").textContent=cloudUser?`${cloudStatus} · ${cloudUser.email||"已登录"}`:"登录并同步";}
 function scheduleCloudSave(){if(!cloudReady||!cloudUser||!cloudClient)return;clearTimeout(cloudTimer);cloudStatus="等待同步";updateCloudButton();cloudTimer=setTimeout(pushCloudState,700);}
 async function pushCloudState(){if(!cloudReady||!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {error}=await cloudClient.from("user_boards").upsert({user_id:cloudUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:"user_id"});cloudStatus=error?"同步失败":"已同步";updateCloudButton();if(error)console.error("Cloud sync failed",error.message);}
-async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;if(!Array.isArray(state.activityLog))state.activityLog=[];if(!Array.isArray(state.todoOrder))state.todoOrder=[];state.viewDate=localDateISO(new Date());timelineInitialized=false;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
+async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;if(!Array.isArray(state.activityLog))state.activityLog=[];if(!Array.isArray(state.todoOrder))state.todoOrder=[];if(!["category","time","manual"].includes(state.todoSortMode))state.todoSortMode="manual";state.viewDate=localDateISO(new Date());timelineInitialized=false;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
 async function initCloud(){if(!window.supabase?.createClient){cloudStatus="云服务未加载";updateCloudButton();return;}cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);const {data}=await cloudClient.auth.getSession();cloudUser=data.session?.user||null;updateCloudButton();if(cloudUser)await loadCloudState();cloudClient.auth.onAuthStateChange(async(_event,session)=>{cloudUser=session?.user||null;cloudReady=false;updateCloudButton();if(cloudUser)await loadCloudState();});}
 function openCloudAccount(){if(cloudUser){$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>云端同步</h2><p>${escapeHtml(cloudUser.email||"")} · ${cloudStatus}</p></div><div class="cloud-actions"><button type="button" data-cloud-sync>立即同步</button><button type="button" class="secondary" data-cloud-signout>退出登录</button></div>`;}else{$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>登录同步</h2><p>使用同一个邮箱账号，即可在电脑和手机之间同步看板。</p></div><div class="cloud-form"><label><span>邮箱</span><input id="cloudEmail" type="email" autocomplete="email" placeholder="your@email.com"></label><label><span>密码</span><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="至少 6 位密码"></label><div><button type="button" data-cloud-signin>登录</button><button type="button" class="secondary" data-cloud-signup>注册</button></div><small id="cloudMessage"></small></div>`;}if(!$("#modal").open)$("#modal").showModal();}
 async function cloudAuth(mode){const email=$("#cloudEmail").value.trim(),password=$("#cloudPassword").value,message=$("#cloudMessage");if(!email||password.length<6){message.textContent="请输入有效邮箱和至少 6 位密码";return;}message.textContent="处理中…";const result=mode==="signup"?await cloudClient.auth.signUp({email,password}):await cloudClient.auth.signInWithPassword({email,password});if(result.error){message.textContent=result.error.message;return;}if(mode==="signup"&&!result.data.session){message.textContent="注册成功，请检查邮箱确认后再登录。";}else{$("#modal").close();}}
 function localDateISO(date){const d=new Date(date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return localDateISO(d);}
+function weekdayText(date){return `周${["日","一","二","三","四","五","六"][new Date(`${date}T12:00:00`).getDay()]}`;}
 function occursOn(todo,date){
   if(todo.status===2)return false;
   const today=localDateISO(new Date());
@@ -91,7 +93,7 @@ function render() {
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
   const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x,state.viewDate)).length;
   const completedCount = state.activityLog.filter(x=>x.date===state.viewDate).length;
-  $("#dateLabel").innerHTML=`<button data-date-shift="-1" aria-label="前一天">‹</button><input id="calendarDate" type="date" value="${state.viewDate}"><button data-date-shift="1" aria-label="后一天">›</button><button data-date-today>今天</button>`;
+  $("#dateLabel").innerHTML=`<button data-date-shift="-1" aria-label="前一天">‹</button><input id="calendarDate" type="date" value="${state.viewDate}"><span class="date-weekday">${weekdayText(state.viewDate)}</span><button data-date-shift="1" aria-label="后一天">›</button><button data-date-today>今天</button>`;
   $("#statDoing").textContent = counts[1]; $("#statScheduled").textContent = scheduledCount; $("#statDone").textContent = completedCount;
   $("#sideDone").textContent = completedCount; $("#sideDoing").textContent = counts[1];
   $("#loadTime").textContent = `${counts[1]} 项进行中`;
@@ -100,6 +102,7 @@ function render() {
   $(".timeline-panel h2").textContent = isToday?"今日时间轴":"当日时间轴";
   $(".projects-panel h2").textContent = "项目管理";
   $("[data-add='quick']").textContent = "＋ 添加待办";
+  $("#todoSortMode").value=state.todoSortMode;
   $("#sideAreas").innerHTML = state.areas.map(a => `<p><i class="dot" style="background:${colors[a.id]}"></i>${a.name}<b>${a.tasks.filter(t=>t.status===1).length}</b></p>`).join("");
   const sideProjects=state.projects.map(p=>({key:`p:${p.id}`,name:p.title,area:p.area,count:p.steps.filter(s=>s.status===1).length})).concat(state.areas.flatMap(a=>a.tasks.filter(t=>t.status===1).map(t=>({key:`a:${t.id}`,name:t.text,area:a.id,count:t.steps.filter(s=>s.status===1).length}))));
   $("#sideProjects").innerHTML=sideProjects.length?sideProjects.map(p=>`<button type="button" data-side-project="${p.key}" title="${escapeHtml(p.name)}"><i class="dot" style="background:${colors[p.area]||colors.admin}"></i><span>${escapeHtml(p.name)}</span><b>${p.count}</b></button>`).join(""):`<small>暂无项目</small>`;
@@ -167,8 +170,15 @@ function isTaskOverdue(todo,date=state.viewDate){
 
 function renderFocus(steps) {
   const rank=new Map(state.todoOrder.map((key,index)=>[key,index]));
-  const doing = steps.filter(x => x.status === 1).sort((a,b)=>(rank.get(a.sourceKey)??9999)-(rank.get(b.sourceKey)??9999));
-  state.todoOrder=[...new Set([...doing.map(x=>x.sourceKey),...state.todoOrder])];
+  const doing = steps.filter(x => x.status === 1);
+  if(state.todoSortMode==="category"){
+    const areaRank={fortune:0,beauty:1,soul:2,admin:3};
+    doing.sort((a,b)=>(areaRank[a.area]??9)-(areaRank[b.area]??9)||(a.project||"").localeCompare(b.project||"","zh-CN")||(a.text||"").localeCompare(b.text||"","zh-CN"));
+  }else if(state.todoSortMode==="time"){
+    const timeKey=x=>isTaskScheduled(x,state.viewDate)?(x.scheduledHour||(x.due?.includes("T")?x.due.slice(11,16):"23:59")):"99:99";
+    doing.sort((a,b)=>timeKey(a).localeCompare(timeKey(b))||(a.text||"").localeCompare(b.text||"","zh-CN"));
+  }else doing.sort((a,b)=>(rank.get(a.sourceKey)??9999)-(rank.get(b.sourceKey)??9999));
+  state.todoOrder=state.todoSortMode==="manual"?[...new Set([...doing.map(x=>x.sourceKey),...state.todoOrder])]:[...new Set([...state.todoOrder,...doing.map(x=>x.sourceKey)])];
   $("#focusList").innerHTML = doing.length ? doing.map(x => {
     const overdue=isTaskOverdue(x),unscheduled=!isTaskScheduled(x,state.viewDate);
     const alert=overdue?`<em class="todo-alert overdue-alert">! 已逾期</em>`:unscheduled?`<em class="todo-alert unscheduled-alert">待排期</em>`:"";
@@ -346,6 +356,7 @@ document.addEventListener("click", e => {
 
 document.addEventListener("change", e => {
   if(e.target.matches("#calendarDate")){state.viewDate=e.target.value||localDateISO(new Date());timelineInitialized=false;save();return;}
+  if(e.target.matches("#todoSortMode")){state.todoSortMode=e.target.value;save();return;}
   if (e.target.matches("[data-edit-project-name]")) {
     const p=state.projects.find(x=>x.id===e.target.dataset.editProjectName);
     if (p && e.target.value.trim()) { p.title=e.target.value.trim(); save(); }
@@ -401,7 +412,7 @@ document.addEventListener("drop", e => {
   const hour=e.target.closest("[data-hour]");
   if(hour&&draggedTodoKey){e.preventDefault();const item=sourceItem(draggedTodoKey);if(item){item.scheduledHour=hour.dataset.hour;item.scheduledDate=state.viewDate;item.due=`${state.viewDate}T${hour.dataset.hour}`;if(!item.duration)item.duration=1;draggedTodoKey="";save();}return;}
   const todoTarget=e.target.closest("[data-todo-key]");
-  if(todoTarget&&draggedTodoKey&&todoTarget.dataset.todoKey!==draggedTodoKey){e.preventDefault();const from=state.todoOrder.indexOf(draggedTodoKey);if(from>=0)state.todoOrder.splice(from,1);const to=state.todoOrder.indexOf(todoTarget.dataset.todoKey);state.todoOrder.splice(to<0?state.todoOrder.length:to,0,draggedTodoKey);draggedTodoKey="";save();return;}
+  if(todoTarget&&draggedTodoKey&&todoTarget.dataset.todoKey!==draggedTodoKey){e.preventDefault();const from=state.todoOrder.indexOf(draggedTodoKey);if(from>=0)state.todoOrder.splice(from,1);const to=state.todoOrder.indexOf(todoTarget.dataset.todoKey);state.todoOrder.splice(to<0?state.todoOrder.length:to,0,draggedTodoKey);state.todoSortMode="manual";draggedTodoKey="";save();return;}
   const target=e.target.closest("[data-order-key]");
   if(!target||!draggedProjectKey||target.dataset.orderKey===draggedProjectKey) return;
   e.preventDefault();
