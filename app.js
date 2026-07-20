@@ -363,6 +363,8 @@ function addStepDetailButtons(prefix){
     const remove=card.querySelector(".direction-delete");
     if(stepId&&remove&&!card.querySelector(".step-detail-open"))remove.insertAdjacentHTML("beforebegin",`<button type="button" class="step-detail-open" data-edit-action="${prefix}:${stepId}" aria-label="查看待办详情" title="查看待办详情"><i></i></button>`);
   });
+  const grid=document.querySelector("#modalBody .detail-step-grid"),done=grid?.querySelectorAll(".completed-step").length||0;
+  if(grid&&done&&!grid.previousElementSibling?.matches("[data-toggle-completed]"))grid.insertAdjacentHTML("beforebegin",`<button type="button" class="completed-steps-toggle compact-completed-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${done}</b><i>展开</i></button>`);
 }
 
 function openProject(id) {

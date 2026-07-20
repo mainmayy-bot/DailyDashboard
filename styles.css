@@ -720,3 +720,20 @@ dialog:has(.project-detail-hero) .detail-step-card:hover .direction-delete{backg
 
 /* v22 — remove the redundant sidebar Goals & Habits block. */
 .side-projects-summary{display:none!important}
+
+/* v24 — direction cards do not expose destructive actions on the overview. */
+.area-manage-card>.direction-delete{display:none!important}
+.area-manage-card:hover .area-row-open{padding-right:0!important}
+
+/* v25 — completed project steps stay folded until requested. */
+dialog:has(.project-detail-hero) .detail-step-grid .completed-step{display:none!important}
+dialog:has(.project-detail-hero) .detail-step-grid.show-completed .completed-step{display:grid!important}
+.compact-completed-toggle{width:auto!important;margin:2px 0 7px auto!important;border:1px solid #e1e4e6!important;border-radius:999px!important;background:#f7f8f8!important;padding:4px 7px!important;font-size:7px!important}
+.compact-completed-toggle:before{display:none!important}
+.compact-completed-toggle span{color:#858c91!important}.compact-completed-toggle b{min-width:16px!important;height:16px!important;font-size:7px!important}.compact-completed-toggle i{margin-left:2px!important;font-size:7px!important}
+
+/* v26 — completed toggle is background-level text, not another control card. */
+.compact-completed-toggle{display:flex!important;align-items:center!important;gap:4px!important;width:auto!important;margin:1px 2px 5px auto!important;border:0!important;border-radius:0!important;background:transparent!important;padding:2px 0!important;color:#9aa0a5!important;box-shadow:none!important}
+.compact-completed-toggle span,.compact-completed-toggle b,.compact-completed-toggle i{display:inline!important;min-width:0!important;width:auto!important;height:auto!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;color:#9aa0a5!important;font-size:7px!important;font-style:normal!important;font-weight:500!important;line-height:1.2!important}
+.compact-completed-toggle b:before{content:"· "!important}.compact-completed-toggle i:before{content:"· "!important}
+.compact-completed-toggle:hover span,.compact-completed-toggle:hover b,.compact-completed-toggle:hover i{color:#666e73!important}
