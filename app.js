@@ -20,10 +20,74 @@ const defaults = {
   quick: [{ id: "q1", text: "确认今天最重要的一件事", status: 1, area: "fortune" }]
 };
 
+const FBS_PLAN_VERSION = 1;
+const FBS_PLAN = {
+  fortune: [
+    { title:"上班", type:"habit", active:true, steps:["每日上班任务"] },
+    { title:"英语教学", type:"target", active:true, steps:["思考制定学习思路与计划","考取雅思 8 分","积累教学经验","持续提升英语能力","成为独立老师"] },
+    { title:"投资美股/外汇", type:"habit", active:false, steps:[] },
+    { title:"AI 产品设计", type:"target", active:false, steps:[] }
+  ],
+  beauty: [
+    { title:"健康", type:"habit", active:true, steps:["睡眠调理","颈椎操","皮肤管理","精神呵护","针灸","中医养生"] },
+    { title:"减肥", type:"habit", active:true, steps:["过午不食","戒糖、少油少盐"] },
+    { title:"美容", type:"habit", active:false, steps:[] },
+    { title:"穿搭", type:"target", active:false, steps:[] }
+  ],
+  soul: [
+    { title:"看书", type:"habit", active:true, steps:["读《猴面包树的书》"] },
+    { title:"听音乐/播客", type:"habit", active:true, steps:["每日音乐 / 播客漫听"] },
+    { title:"看电影", type:"habit", active:false, steps:[] },
+    { title:"玩游戏", type:"habit", active:false, steps:[] },
+    { title:"练字", type:"habit", active:false, steps:[] },
+    { title:"古琴", type:"habit", active:false, steps:[] },
+    { title:"画画", type:"habit", active:false, steps:[] },
+    { title:"唱歌", type:"habit", active:false, steps:[] },
+    { title:"舞蹈", type:"habit", active:false, steps:[] },
+    { title:"运动", type:"habit", active:true, steps:["居家健身","爬坡","游泳","网球","滑雪","攀岩","拳击","冲浪"] },
+    { title:"家居", type:"target", active:false, steps:[] },
+    { title:"旅行", type:"target", active:true, steps:["Solo trip","北京周边 Staycation","去西北看大月亮","去沙漠看星空","朝圣之路"] },
+    { title:"其他兴趣", type:"target", active:true, steps:["Vibe Coding","个人美甲","AI 视频创作","Drinks"] }
+  ],
+  admin: [
+    { title:"备拍事项", type:"target", active:false, steps:[] },
+    { title:"检查日程", type:"habit", active:true, steps:["定期整理灵感（From 小红书）","每月复盘启动事项及时间安排"] }
+  ]
+};
+
+function applyFbsPlan(targetState){
+  if(!targetState?.areas||targetState.fbsPlanVersion>=FBS_PLAN_VERSION)return false;
+  const simplify=text=>String(text||"").replace(/[\s/·*《》]/g,"").toLowerCase();
+  const aliases={"上班":["工作任务"],"英语教学":["雅思教学"],"健康":["健康管理"],"减肥":["减肥塑形"],"看书":["读书"],"运动":["运动户外"],"旅行":["旅行探索"]};
+  Object.entries(FBS_PLAN).forEach(([areaId,directions])=>{
+    const area=targetState.areas.find(a=>a.id===areaId);if(!area)return;
+    if(!Array.isArray(area.tasks))area.tasks=[];
+    directions.forEach((direction,index)=>{
+      const names=[direction.title,...(aliases[direction.title]||[])].map(simplify);
+      let task=area.tasks.find(t=>names.includes(simplify(t.text)));
+      if(!task){
+        task={id:`fbs-${areaId}-${index}`,text:direction.title,status:direction.active?1:0,steps:[]};
+        area.tasks.push(task);
+      }
+      task.text=direction.title;
+      task.projectType=direction.type;
+      if(!Number.isFinite(task.checkins))task.checkins=0;
+      if(!Number.isFinite(task.habitGoal))task.habitGoal=30;
+      if(!Array.isArray(task.steps))task.steps=[];
+      direction.steps.forEach((text,stepIndex)=>{
+        if(!task.steps.some(s=>simplify(s.text)===simplify(text)))task.steps.push({id:`fbs-${areaId}-${index}-${stepIndex}`,text,status:0,repeat:"none",notes:"",subtasks:[]});
+      });
+    });
+  });
+  targetState.fbsPlanVersion=FBS_PLAN_VERSION;
+  return true;
+}
+
 let state;
 let timelineInitialized=false;
 let timelineClockTimer=null;
 try { state = JSON.parse(localStorage.getItem(KEY)) || structuredClone(defaults); } catch { state = structuredClone(defaults); }
+applyFbsPlan(state);
 state.areas.forEach(a => { if (a.id === "life") a.id = "admin"; if (a.id === "admin") a.name = "Adimin"; });
 state.projects.forEach(p => { if (p.area === "life") p.area = "admin"; });
 state.projects.forEach(p=>{if(!["target","habit"].includes(p.projectType))p.projectType="target";if(!Number.isFinite(p.checkins))p.checkins=0;if(!Number.isFinite(p.habitGoal))p.habitGoal=30;});
@@ -95,6 +159,7 @@ function occursOn(todo,date){
 }
 
 function render() {
+  if(applyFbsPlan(state)){localStorage.setItem(KEY,JSON.stringify(state));scheduleCloudSave();}
   const all=allSteps(), anytime=all.filter(x=>isAnytime(x,state.viewDate));
   const steps = all.filter(x=>occursOn(x,state.viewDate)&&!isAnytime(x,state.viewDate));
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
@@ -107,15 +172,18 @@ function render() {
   const isToday=state.viewDate===localDateISO(new Date());
   $(".focus-panel h2").textContent = isToday?"今日待办":"当日待办";
   $(".timeline-panel h2").textContent = isToday?"今日时间轴":"当日时间轴";
-  $(".projects-panel h2").textContent = "项目管理";
+  $(".projects-panel h2").textContent = "目标与习惯";
   $("[data-add='quick']").textContent = "＋ 添加待办";
   $("#todoSortMode").value=state.todoSortMode;
   $("#sideAreas").innerHTML = state.areas.map(a => `<p><i class="dot" style="background:${colors[a.id]}"></i>${a.name}<b>${a.tasks.filter(t=>t.status===1).length}</b></p>`).join("");
-  const sideProjects=state.projects.map(p=>({key:`p:${p.id}`,name:p.title,area:p.area,count:p.steps.filter(s=>s.status===1).length})).concat(state.areas.flatMap(a=>a.tasks.filter(t=>t.status===1).map(t=>({key:`a:${t.id}`,name:t.text,area:a.id,count:t.steps.filter(s=>s.status===1).length}))));
-  $("#sideProjects").innerHTML=sideProjects.length?sideProjects.map(p=>`<button type="button" data-side-project="${p.key}" title="${escapeHtml(p.name)}"><i class="dot" style="background:${colors[p.area]||colors.admin}"></i><span>${escapeHtml(p.name)}</span><b>${p.count}</b></button>`).join(""):`<small>暂无项目</small>`;
-  $(".areas-panel h2").textContent="领域仪表盘";
-  $(".areas-panel header small").textContent="管理长期方向与持续投入";
-  $(".areas-panel header>span").textContent="关注推进状态，而非一次性完成";
+  $(".side-projects-summary h4").textContent="目标与习惯";
+  const sideProjects=state.projects.map(p=>({key:`p:${p.id}`,name:p.title,area:p.area,type:p.projectType||"target",done:p.steps.filter(s=>s.status===2).length,total:p.steps.length,checkins:p.checkins||0})).concat(state.areas.flatMap(a=>a.tasks.filter(t=>t.status===1).map(t=>({key:`a:${t.id}`,name:t.text,area:a.id,type:t.projectType||"target",done:t.steps.filter(s=>s.status===2).length,total:t.steps.length,checkins:t.checkins||0}))));
+  const sideRank=new Map(state.projectOrder.map((key,index)=>[key,index]));sideProjects.sort((a,b)=>(sideRank.get(a.key)??9999)-(sideRank.get(b.key)??9999));
+  const sideGroup=(type,title)=>{const rows=sideProjects.filter(p=>p.type===type);return `<section class="side-project-group side-${type}-group"><header><span>${title}</span><b>${rows.length}</b></header>${rows.length?rows.map(p=>`<button type="button" class="side-project-${p.type}" data-side-project="${p.key}" title="${escapeHtml(p.name)}"><i class="dot" style="--c:${colors[p.area]||colors.admin}"></i><span>${escapeHtml(p.name)}</span><b>${p.type==="habit"?`${p.checkins}次`:`${p.done}/${p.total}`}</b></button>`).join(""):`<small>暂无${title}</small>`}</section>`;};
+  $("#sideProjects").innerHTML=sideProjects.length?sideGroup("target","目标")+sideGroup("habit","习惯"):`<small>暂无目标或习惯</small>`;
+  $(".areas-panel h2").textContent="人生版图";
+  $(".areas-panel header small").textContent="直接看见每个领域正在经营什么";
+  $(".areas-panel header>span").textContent="长期方向 · 当前重点 · 持续投入";
   $(".signals-panel h2").textContent="数据概览";
   renderTimeline(steps); renderFocus(steps,anytime); renderProjects(); renderAreas(); renderSignals(steps);
   $(".refine-head")?.remove(); $("#refineList")?.remove();
@@ -204,7 +272,7 @@ function renderFocus(steps,anytime){
 function repeatLabel(todo){if(todo.repeat==="customDays")return `每 ${todo.repeatInterval||2} 天`;if(todo.repeat==="customWeekdays")return (todo.repeatWeekdays||[]).map(n=>`周${["日","一","二","三","四","五","六"][n]}`).join("、");return {daily:"每天",weekdays:"工作日",weekly:"每周",monthly:"每月"}[todo.repeat];}
 function todoMeta(todo){const bits=[];bits.push(todo.project||todo.sourceProject||"独立待办");if(isCarriedOver(todo,state.viewDate))bits.push(`原定 ${taskDate(todo)} · 待重新安排`);else bits.push(todo.due?todo.due.replace("T"," "):todo.scheduledHour||"未安排时间");if(todo.repeat&&todo.repeat!=="none")bits.push(repeatLabel(todo));if(todo.subtasks?.length)bits.push(`${todo.subtasks.filter(s=>s.done).length}/${todo.subtasks.length} 子任务`);return bits.join(" · ");}
 
-function projectMetric(project){if(project.projectType==="habit"){const count=project.checkins||0,goal=Math.max(1,project.habitGoal||30);return {html:`<strong class="habit-total"><span>已打卡</span><b>${count}</b><em>次</em></strong>`,width:Math.min(100,count/goal*100),kind:"习惯"};}const progress=pct(project.steps);return {html:`<strong>${progress}%</strong>`,width:progress,kind:"目标"};}
+function projectMetric(project){if(project.projectType==="habit"){const count=project.checkins||0;return {html:`<strong class="habit-total"><span>累计</span><b>${count}</b><em>次</em></strong>`,width:0,kind:"习惯"};}const progress=pct(project.steps);return {html:`<strong>${progress}%</strong>`,width:progress,kind:"目标"};}
 
 function renderProjects() {
   const items = state.projects.map(p => ({ key:`p:${p.id}`, type:"project", data:p }))
@@ -212,18 +280,25 @@ function renderProjects() {
   const rank = new Map(state.projectOrder.map((key,index)=>[key,index]));
   items.sort((a,b)=>(rank.get(a.key)??9999)-(rank.get(b.key)??9999));
   state.projectOrder = [...new Set([...items.map(x=>x.key), ...state.projectOrder])];
-  $("#projectGrid").innerHTML = items.map(item => {
+  const cardHtml = item => {
     if (item.type === "project") {
       const p=item.data, metric=projectMetric(p);
-      return `<article class="project-card ${p.projectType==="habit"?"habit-project":"target-project"}" data-order-key="${item.key}" style="--c:${colors[p.area]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(p.title)}</b>${metric.html}</div><div class="project-source"><i>${metric.kind}</i> · ${state.areas.find(a=>a.id===p.area)?.name||p.area}</div><div class="progress"><i style="width:${metric.width}%"></i></div><div class="step-row">${p.steps.map(s => `<button class="step-dot s${s.status}" data-step="${s.id}" title="${statusText(s.status)}"><i>${s.status===2?"✓":s.status===1?"•":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div><button class="project-edit" data-project="${p.id}">编辑项目</button></article>`;
+      const done=p.steps.filter(s=>s.status===2).length,total=p.steps.length,value=p.projectType==="habit"?(p.checkins||0):done,progressLabel=p.projectType==="habit"?"持续积累":`${value}/${total}`;
+      return `<article class="project-card project-summary-card classic-project-card ${p.projectType==="habit"?"habit-project":"target-project"}" data-order-key="${item.key}" style="--c:${colors[p.area]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(p.title)}</b>${metric.html}</div><div class="project-source"><i>${metric.kind}</i> · ${state.areas.find(a=>a.id===p.area)?.name||p.area}</div><div class="progress project-emphasis-progress"><i style="width:${metric.width}%"></i><b>${progressLabel}</b></div><button class="project-edit" data-project="${p.id}" aria-label="查看${escapeHtml(p.title)}详情"></button></article>`;
     }
     const t=item.data, a=item.area, metric=projectMetric(t);
-    return `<article class="project-card ${t.projectType==="habit"?"habit-project":"target-project"}" data-order-key="${item.key}" style="--c:${colors[a.id]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(t.text)}</b>${metric.html}</div><div class="project-source"><i>${metric.kind}</i> · ${a.name} · 来自领域仪表盘</div><div class="progress"><i style="width:${metric.width}%"></i></div><div class="step-row">${t.steps.map(s=>`<button class="step-dot s${s.status}" data-area-project-step="${s.id}" title="${statusText(s.status)}"><i>${s.status===2?"✓":s.status===1?"•":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div><button class="project-edit" data-area-project="${t.id}">编辑项目</button></article>`;
-  }).join("");
+    const done=t.steps.filter(s=>s.status===2).length,total=t.steps.length,value=t.projectType==="habit"?(t.checkins||0):done,progressLabel=t.projectType==="habit"?"持续积累":`${value}/${total}`;
+    return `<article class="project-card project-summary-card classic-project-card ${t.projectType==="habit"?"habit-project":"target-project"}" data-order-key="${item.key}" style="--c:${colors[a.id]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(t.text)}</b>${metric.html}</div><div class="project-source"><i>${metric.kind}</i> · ${a.name}</div><div class="progress project-emphasis-progress"><i style="width:${metric.width}%"></i><b>${progressLabel}</b></div><button class="project-edit" data-area-project="${t.id}" aria-label="查看${escapeHtml(t.text)}详情"></button></article>`;
+  };
+  const group=(type,title,caption)=>{const groupItems=items.filter(item=>(item.data.projectType||"target")===type);return `<section class="project-type-group ${type}-group"><header><div><b>${title}</b><small>${caption}</small></div><span>${groupItems.length}</span></header><div class="project-type-grid">${groupItems.length?groupItems.map(cardHtml).join(""):`<div class="project-group-empty">暂无${title}</div>`}</div></section>`;};
+  $("#projectGrid").innerHTML = group("target","目标进展","看结果与下一步")+group("habit","习惯打卡","看累计投入，不以完成消失");
 }
 
 function renderAreas() {
-  $("#areaGrid").innerHTML = state.areas.map(a => { const active=a.tasks.filter(t=>t.status===1).length,momentum=a.tasks.length?Math.round(active/a.tasks.length*100):0; return `<button class="area-card" data-area="${a.id}" style="--c:${colors[a.id]}"><div><i class="area-icon area-icon-${a.id}"><span></span></i><span><b>${a.name}</b><small>${a.cn}</small></span></div><div class="domain-state"><span><i class="pulse-dot"></i>${active} 项推进中</span></div><span class="momentum-label">活跃度 ${momentum}%</span><span class="ring" style="--p:${momentum*3.6}deg"></span></button>`; }).join("");
+  $("#areaGrid").innerHTML = state.areas.map(a => {
+    const active=a.tasks.filter(t=>t.status===1).length,total=a.tasks.length,ratio=total?Math.round(active/total*100):0;
+    return `<button class="area-card area-plan-card area-summary-only no-area-progress" data-area="${a.id}" style="--c:${colors[a.id]}"><div class="area-card-head"><i class="area-icon area-icon-${a.id}"><span></span></i><span><b>${a.name}</b><small>${a.cn}</small></span></div><div class="area-active-summary"><i></i><b>${active} 项推进中</b></div><footer><span>共 ${total} 个长期方向</span><b>查看详情</b></footer><span class="ring" style="--p:${ratio*3.6}deg"></span></button>`;
+  }).join("");
 }
 
 function renderSignals(steps) {
@@ -271,14 +346,30 @@ function cycleStep(id) {
 
 function openArea(id) {
   const a=state.areas.find(x=>x.id===id);
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[id]}"><span>${a.name}</span><h2>${a.cn}长期方向</h2><p>状态：计划中 → 推进中。长期方向不会因为“完成”而消失。</p></div><div class="modal-steps area-task-list">${a.tasks.map(t=>`<div class="modal-sort-item" draggable="true" data-modal-type="area" data-modal-parent="${a.id}" data-modal-key="${t.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill domain-s${t.status}" data-area-step="${t.id}">${domainStatusText(t.status)}</button><input class="step-name-input" value="${escapeHtml(t.text)}" data-edit-area-task="${t.id}" aria-label="长期方向名称"><button type="button" data-delete-task="${t.id}" aria-label="删除方向">×</button></div>`).join("")}</div><div class="add-row"><input id="newTask" placeholder="添加新的长期方向"><button type="button" data-add-task="${id}">添加</button></div>`;
+  const active=a.tasks.filter(t=>t.status===1).length;
+  $("#modalBody").innerHTML=`<section class="detail-hero area-detail-hero compact-area-hero" style="--c:${colors[id]}"><div class="detail-kicker"><i class="area-icon area-icon-${a.id}"><span></span></i><span>${a.name}<small>${a.cn}</small></span></div><h2>${a.cn}长期计划</h2><div class="detail-summary"><span><b>${a.tasks.length}</b><small>长期方向</small></span><span><b>${active}</b><small>正在推进</small></span><span><b>${a.tasks.length-active}</b><small>计划储备</small></span></div></section><div class="detail-section-title"><div><b>方向管理</b><small>选择当前投入，继续拆解具体步骤</small></div><span>${a.tasks.length} 项</span></div><div class="area-manage-grid">${a.tasks.map(t=>`<article class="area-manage-card ${t.status===1?"active":"planned"}" draggable="true" data-modal-type="area" data-modal-parent="${a.id}" data-modal-key="${t.id}" style="--c:${colors[id]}"><header><i class="area-row-dot"></i><button type="button" class="area-row-status" data-area-step="${t.id}">${domainStatusText(t.status)}</button><span class="modal-grip">⠿</span></header><input class="step-name-input" value="${escapeHtml(t.text)}" data-edit-area-task="${t.id}" aria-label="长期方向名称"><footer><span>${t.steps.length} 个步骤</span><button type="button" class="area-row-open" data-area-project="${t.id}">查看详情 <i>›</i></button></footer><button type="button" class="direction-delete" data-delete-task="${t.id}" aria-label="删除方向">×</button></article>`).join("")}</div><div class="add-row detail-add-row"><input id="newTask" placeholder="添加新的长期方向"><button type="button" data-add-task="${id}">添加方向</button></div>`;
   if (!$("#modal").open) $("#modal").showModal();
+}
+
+function projectDetailBody(item,area,isAreaProject=false){
+  const metric=projectMetric(item),done=item.steps.filter(s=>s.status===2).length,doing=item.steps.filter(s=>s.status===1).length,pending=item.steps.filter(s=>s.status===0).length;
+  const stepAttr=isAreaProject?"data-area-project-step":"data-step",editAttr=isAreaProject?"data-edit-area-project-step":"data-edit-step",deleteAttr=isAreaProject?"data-delete-area-project-step":"data-delete-step",modalType=isAreaProject?"areaProject":"project";
+  return `<section class="detail-hero project-detail-hero" style="--c:${colors[area.id]}"><div class="detail-kicker"><span class="detail-type-dot"></span><span>${area.name}<small>${item.projectType==="habit"?"HABIT PROJECT":"GOAL PROJECT"}</small></span></div><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(item.title||item.text)}" ${isAreaProject?`data-edit-area-project="${item.id}"`:`data-edit-project-name="${item.id}"`} aria-label="项目名称"><button type="button" class="delete-project" ${isAreaProject?`data-delete-area-project="${item.id}"`:`data-delete-project="${item.id}"`}>删除</button></div><div class="detail-progress-line"><span><i style="width:${metric.width}%"></i></span>${metric.html}</div><div class="detail-summary"><span><b>${doing}</b><small>正在推进</small></span><span><b>${pending}</b><small>下一步</small></span><span><b>${done}</b><small>已完成</small></span></div><div class="project-settings"><label><span>项目类型</span><select ${isAreaProject?`data-edit-area-project-type="${item.id}"`:`data-edit-project-type="${item.id}"`}><option value="target" ${item.projectType==="target"?"selected":""}>目标</option><option value="habit" ${item.projectType==="habit"?"selected":""}>习惯</option></select></label><label class="habit-goal-setting ${item.projectType==="habit"?"visible":""}"><span>阶段打卡目标</span><input type="number" min="1" value="${item.habitGoal||30}" ${isAreaProject?`data-edit-area-habit-goal="${item.id}"`:`data-edit-habit-goal="${item.id}"`}></label></div></section><div class="detail-section-title"><div><b>${item.projectType==="habit"?"打卡动作":"推进路径"}</b><small>点状态切换 · 拖动调整顺序</small></div><span>${item.steps.length} 项</span></div><div class="modal-steps detail-step-grid collapsible-completed">${item.steps.map((s,index)=>`<article class="modal-sort-item detail-step-card ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="${modalType}" data-modal-parent="${item.id}" data-modal-key="${s.id}" style="--c:${colors[area.id]}"><span class="modal-grip">⠿</span><b class="step-index">${String(index+1).padStart(2,"0")}</b><div><input class="step-name-input" value="${escapeHtml(s.text)}" ${editAttr}="${s.id}" aria-label="步骤名称"><small>${statusText(s.status)}</small></div><button type="button" class="step-status-orb s${s.status}" ${stepAttr}="${s.id}" aria-label="切换状态"><i>${s.status===2?"✓":s.status===1?"•":""}</i></button><button type="button" class="direction-delete" ${deleteAttr}="${s.id}" aria-label="删除步骤">×</button></article>`).join("")}</div>`;
+}
+
+function addStepDetailButtons(prefix){
+  document.querySelectorAll("#modalBody .detail-step-card").forEach(card=>{
+    const stepId=card.dataset.modalKey;
+    const remove=card.querySelector(".direction-delete");
+    if(stepId&&remove&&!card.querySelector(".step-detail-open"))remove.insertAdjacentHTML("beforebegin",`<button type="button" class="step-detail-open" data-edit-action="${prefix}:${stepId}" aria-label="查看待办详情" title="查看待办详情"><i></i></button>`);
+  });
 }
 
 function openProject(id) {
   const p=state.projects.find(x=>x.id===id);
-  const doneCount=p.steps.filter(s=>s.status===2).length;
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[p.area]}"><span>PROJECT</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(p.title)}" data-edit-project-name="${p.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-project="${p.id}">删除项目</button></div><p>目标按步骤计算进度；习惯每次完成在做步骤会累计打卡。</p><div class="project-settings"><label><span>项目类型</span><select data-edit-project-type="${p.id}"><option value="target" ${p.projectType==="target"?"selected":""}>目标</option><option value="habit" ${p.projectType==="habit"?"selected":""}>习惯</option></select></label><label class="habit-goal-setting ${p.projectType==="habit"?"visible":""}"><span>阶段打卡目标</span><input type="number" min="1" value="${p.habitGoal||30}" data-edit-habit-goal="${p.id}"></label></div></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${p.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="project" data-modal-parent="${p.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newStep" placeholder="拆解新的项目步骤"><button type="button" data-add-step="${id}">添加</button></div>`;
+  const area=state.areas.find(a=>a.id===p.area)||state.areas[3];
+  $("#modalBody").innerHTML=projectDetailBody(p,area)+`<div class="add-row detail-add-row"><input id="newStep" placeholder="添加一个清晰、可执行的步骤"><button type="button" data-add-step="${id}">添加步骤</button></div>`;
+  addStepDetailButtons("pstep");
   if (!$("#modal").open) $("#modal").showModal();
 }
 
@@ -286,8 +377,8 @@ function openAreaProject(taskId) {
   const area=state.areas.find(a=>a.tasks.some(t=>String(t.id)===String(taskId)));
   const task=area?.tasks.find(t=>String(t.id)===String(taskId));
   if (!task) return;
-  const doneCount=task.steps.filter(s=>s.status===2).length;
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[area.id]}"><span>${area.name} · FROM DASHBOARD</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(task.text)}" data-edit-area-project="${task.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-area-project="${task.id}">删除项目</button></div><p>目标按步骤计算进度；习惯每次完成在做步骤会累计打卡。</p><div class="project-settings"><label><span>项目类型</span><select data-edit-area-project-type="${task.id}"><option value="target" ${task.projectType==="target"?"selected":""}>目标</option><option value="habit" ${task.projectType==="habit"?"selected":""}>习惯</option></select></label><label class="habit-goal-setting ${task.projectType==="habit"?"visible":""}"><span>阶段打卡目标</span><input type="number" min="1" value="${task.habitGoal||30}" data-edit-area-habit-goal="${task.id}"></label></div></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${task.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="areaProject" data-modal-parent="${task.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-area-project-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-area-project-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-area-project-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newAreaProjectStep" placeholder="拆解新的项目步骤"><button type="button" data-add-area-project-step="${task.id}">添加</button></div>`;
+  $("#modalBody").innerHTML=projectDetailBody(task,area,true)+`<div class="add-row detail-add-row"><input id="newAreaProjectStep" placeholder="添加一个清晰、可执行的步骤"><button type="button" data-add-area-project-step="${task.id}">添加步骤</button></div>`;
+  addStepDetailButtons("astep");
   if (!$("#modal").open) $("#modal").showModal();
 }
 
