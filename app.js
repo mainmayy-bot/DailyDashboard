@@ -75,7 +75,7 @@ async function cloudAuth(mode){const email=$("#cloudEmail").value.trim(),passwor
 function localDateISO(date){const d=new Date(date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return localDateISO(d);}
 function weekdayText(date){return `周${["日","一","二","三","四","五","六"][new Date(`${date}T12:00:00`).getDay()]}`;}
-function isAnytime(todo,date=state.viewDate){const hasExactTime=Boolean(todo.scheduledHour||(todo.due?.includes("T")&&todo.due.slice(11,16))),dateValue=taskDate(todo);return todo.status===1&&!hasExactTime&&(!todo.repeat||todo.repeat==="none")&&(!dateValue||dateValue===date);}
+function isAnytime(todo,date=state.viewDate){const hasExactTime=Boolean(todo.scheduledHour||(todo.due?.includes("T")&&todo.due.slice(11,16))),dateValue=taskDate(todo),repeating=todo.repeat&&todo.repeat!=="none";return todo.status===1&&!hasExactTime&&(!dateValue||dateValue===date||(repeating&&occursOn(todo,date)));}
 function occursOn(todo,date){
   if(todo.status===2)return false;
   const today=localDateISO(new Date());
