@@ -26,6 +26,7 @@ let timelineClockTimer=null;
 try { state = JSON.parse(localStorage.getItem(KEY)) || structuredClone(defaults); } catch { state = structuredClone(defaults); }
 state.areas.forEach(a => { if (a.id === "life") a.id = "admin"; if (a.id === "admin") a.name = "Adimin"; });
 state.projects.forEach(p => { if (p.area === "life") p.area = "admin"; });
+state.projects.forEach(p=>{if(!["target","habit"].includes(p.projectType))p.projectType="target";if(!Number.isFinite(p.checkins))p.checkins=0;if(!Number.isFinite(p.habitGoal))p.habitGoal=30;});
 state.quick.forEach(q => { if (q.area === "life") q.area = "admin"; });
 state.areas.forEach(a => a.tasks.forEach(t => { if (typeof t.status !== "number") t.status = t.done ? 2 : 0; delete t.done; }));
 state.areas.forEach(a=>a.tasks.forEach(t=>{if(t.status===2)t.status=1;}));
@@ -34,9 +35,11 @@ if (!Array.isArray(state.projectOrder)) state.projectOrder = [];
 if (!Array.isArray(state.todoOrder)) state.todoOrder = [];
 if (!["category","time","manual"].includes(state.todoSortMode)) state.todoSortMode = "manual";
 if (!Array.isArray(state.activityLog)) state.activityLog = [];
-state.quick.forEach(q=>{if(!q.repeat)q.repeat="none";if(!q.notes)q.notes="";if(!Array.isArray(q.subtasks))q.subtasks=[];});
-state.projects.forEach(p=>p.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];}));
-state.areas.forEach(a=>a.tasks.forEach(t=>t.steps.forEach(s=>{if(!s.repeat)s.repeat="none";if(!s.notes)s.notes="";if(!Array.isArray(s.subtasks))s.subtasks=[];})));
+state.areas.forEach(a=>a.tasks.forEach(t=>{if(!["target","habit"].includes(t.projectType))t.projectType="target";if(!Number.isFinite(t.checkins))t.checkins=0;if(!Number.isFinite(t.habitGoal))t.habitGoal=30;}));
+function normalizeRepeat(item){if(!item.repeat)item.repeat="none";if(!Number.isFinite(item.repeatInterval))item.repeatInterval=2;if(!Array.isArray(item.repeatWeekdays))item.repeatWeekdays=[];if(!item.notes)item.notes="";if(!Array.isArray(item.subtasks))item.subtasks=[];}
+state.quick.forEach(normalizeRepeat);
+state.projects.forEach(p=>p.steps.forEach(normalizeRepeat));
+state.areas.forEach(a=>a.tasks.forEach(t=>t.steps.forEach(normalizeRepeat)));
 state.quick.forEach(normalizeSubtasks);state.projects.forEach(p=>p.steps.forEach(normalizeSubtasks));state.areas.forEach(a=>a.tasks.forEach(t=>t.steps.forEach(normalizeSubtasks)));
 // 每次打开页面默认回到当天；用户本次使用期间仍可自由切换日期。
 state.viewDate=localDateISO(new Date());
@@ -65,13 +68,14 @@ function normalizeSubtasks(item){item.subtasks=(item.subtasks||[]).map((s,i)=>ty
 function updateCloudButton(){const button=$("#cloudAccount");if(!button)return;button.classList.toggle("connected",!!cloudUser);button.classList.toggle("syncing",cloudStatus==="同步中");button.querySelector("span").textContent=cloudUser?`${cloudStatus} · ${cloudUser.email||"已登录"}`:"登录并同步";}
 function scheduleCloudSave(){if(!cloudReady||!cloudUser||!cloudClient)return;clearTimeout(cloudTimer);cloudStatus="等待同步";updateCloudButton();cloudTimer=setTimeout(pushCloudState,700);}
 async function pushCloudState(){if(!cloudReady||!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {error}=await cloudClient.from("user_boards").upsert({user_id:cloudUser.id,data:state,updated_at:new Date().toISOString()},{onConflict:"user_id"});cloudStatus=error?"同步失败":"已同步";updateCloudButton();if(error)console.error("Cloud sync failed",error.message);}
-async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;if(!Array.isArray(state.activityLog))state.activityLog=[];if(!Array.isArray(state.todoOrder))state.todoOrder=[];if(!["category","time","manual"].includes(state.todoSortMode))state.todoSortMode="manual";state.viewDate=localDateISO(new Date());timelineInitialized=false;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
+async function loadCloudState(){if(!cloudUser)return;cloudStatus="同步中";updateCloudButton();const {data,error}=await cloudClient.from("user_boards").select("data").eq("user_id",cloudUser.id).maybeSingle();if(error){cloudStatus="需要初始化数据库";updateCloudButton();return;}if(data?.data?.areas){state=data.data;if(!Array.isArray(state.activityLog))state.activityLog=[];if(!Array.isArray(state.todoOrder))state.todoOrder=[];if(!["category","time","manual"].includes(state.todoSortMode))state.todoSortMode="manual";state.projects.forEach(p=>{if(!["target","habit"].includes(p.projectType))p.projectType="target";if(!Number.isFinite(p.checkins))p.checkins=0;if(!Number.isFinite(p.habitGoal))p.habitGoal=30;p.steps.forEach(normalizeRepeat);});state.areas.forEach(a=>a.tasks.forEach(t=>{if(!["target","habit"].includes(t.projectType))t.projectType="target";if(!Number.isFinite(t.checkins))t.checkins=0;if(!Number.isFinite(t.habitGoal))t.habitGoal=30;(t.steps||[]).forEach(normalizeRepeat);}));state.quick.forEach(normalizeRepeat);state.viewDate=localDateISO(new Date());timelineInitialized=false;localStorage.setItem(KEY,JSON.stringify(state));cloudReady=true;render();cloudStatus="已同步";updateCloudButton();}else{cloudReady=true;await pushCloudState();}}
 async function initCloud(){if(!window.supabase?.createClient){cloudStatus="云服务未加载";updateCloudButton();return;}cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);const {data}=await cloudClient.auth.getSession();cloudUser=data.session?.user||null;updateCloudButton();if(cloudUser)await loadCloudState();cloudClient.auth.onAuthStateChange(async(_event,session)=>{cloudUser=session?.user||null;cloudReady=false;updateCloudButton();if(cloudUser)await loadCloudState();});}
 function openCloudAccount(){if(cloudUser){$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>云端同步</h2><p>${escapeHtml(cloudUser.email||"")} · ${cloudStatus}</p></div><div class="cloud-actions"><button type="button" data-cloud-sync>立即同步</button><button type="button" class="secondary" data-cloud-signout>退出登录</button></div>`;}else{$("#modalBody").innerHTML=`<div class="modal-head cloud-modal-head"><span>CLOUD SYNC</span><h2>登录同步</h2><p>使用同一个邮箱账号，即可在电脑和手机之间同步看板。</p></div><div class="cloud-form"><label><span>邮箱</span><input id="cloudEmail" type="email" autocomplete="email" placeholder="your@email.com"></label><label><span>密码</span><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="至少 6 位密码"></label><div><button type="button" data-cloud-signin>登录</button><button type="button" class="secondary" data-cloud-signup>注册</button></div><small id="cloudMessage"></small></div>`;}if(!$("#modal").open)$("#modal").showModal();}
 async function cloudAuth(mode){const email=$("#cloudEmail").value.trim(),password=$("#cloudPassword").value,message=$("#cloudMessage");if(!email||password.length<6){message.textContent="请输入有效邮箱和至少 6 位密码";return;}message.textContent="处理中…";const result=mode==="signup"?await cloudClient.auth.signUp({email,password}):await cloudClient.auth.signInWithPassword({email,password});if(result.error){message.textContent=result.error.message;return;}if(mode==="signup"&&!result.data.session){message.textContent="注册成功，请检查邮箱确认后再登录。";}else{$("#modal").close();}}
 function localDateISO(date){const d=new Date(date);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function shiftDate(date,days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+days);return localDateISO(d);}
 function weekdayText(date){return `周${["日","一","二","三","四","五","六"][new Date(`${date}T12:00:00`).getDay()]}`;}
+function isAnytime(todo){const hasExactTime=Boolean(todo.scheduledHour||(todo.due?.includes("T")&&todo.due.slice(11,16)));return todo.status===1&&!hasExactTime&&(!todo.repeat||todo.repeat==="none");}
 function occursOn(todo,date){
   if(todo.status===2)return false;
   const today=localDateISO(new Date());
@@ -85,11 +89,14 @@ function occursOn(todo,date){
   if(todo.repeat==="weekdays")return d.getDay()>0&&d.getDay()<6;
   if(todo.repeat==="weekly")return d.getDay()===b.getDay();
   if(todo.repeat==="monthly")return d.getDate()===b.getDate();
+  if(todo.repeat==="customDays")return Math.floor((d-b)/86400000)%Math.max(1,todo.repeatInterval||2)===0;
+  if(todo.repeat==="customWeekdays")return (todo.repeatWeekdays||[]).map(Number).includes(d.getDay());
   return false;
 }
 
 function render() {
-  const steps = allSteps().filter(x=>occursOn(x,state.viewDate));
+  const all=allSteps(), anytime=all.filter(isAnytime);
+  const steps = all.filter(x=>occursOn(x,state.viewDate)&&!isAnytime(x));
   const counts = [0,1,2].map(n => steps.filter(x => x.status === n).length);
   const scheduledCount = steps.filter(x => x.status === 1 && isTaskScheduled(x,state.viewDate)).length;
   const completedCount = state.activityLog.filter(x=>x.date===state.viewDate).length;
@@ -110,7 +117,7 @@ function render() {
   $(".areas-panel header small").textContent="管理长期方向与持续投入";
   $(".areas-panel header>span").textContent="关注推进状态，而非一次性完成";
   $(".signals-panel h2").textContent="数据概览";
-  renderTimeline(steps); renderFocus(steps); renderProjects(); renderAreas(); renderSignals(steps);
+  renderTimeline(steps); renderFocus(steps,anytime); renderProjects(); renderAreas(); renderSignals(steps);
   $(".refine-head")?.remove(); $("#refineList")?.remove();
 }
 
@@ -168,9 +175,9 @@ function isTaskOverdue(todo,date=state.viewDate){
   return current>end;
 }
 
-function renderFocus(steps) {
+function sortTodos(items){
   const rank=new Map(state.todoOrder.map((key,index)=>[key,index]));
-  const doing = steps.filter(x => x.status === 1);
+  const doing=items.filter(x=>x.status===1);
   if(state.todoSortMode==="category"){
     const areaRank={fortune:0,beauty:1,soul:2,admin:3};
     doing.sort((a,b)=>(areaRank[a.area]??9)-(areaRank[b.area]??9)||(a.project||"").localeCompare(b.project||"","zh-CN")||(a.text||"").localeCompare(b.text||"","zh-CN"));
@@ -179,15 +186,25 @@ function renderFocus(steps) {
     doing.sort((a,b)=>timeKey(a).localeCompare(timeKey(b))||(a.text||"").localeCompare(b.text||"","zh-CN"));
   }else doing.sort((a,b)=>(rank.get(a.sourceKey)??9999)-(rank.get(b.sourceKey)??9999));
   state.todoOrder=state.todoSortMode==="manual"?[...new Set([...doing.map(x=>x.sourceKey),...state.todoOrder])]:[...new Set([...state.todoOrder,...doing.map(x=>x.sourceKey)])];
-  $("#focusList").innerHTML = doing.length ? doing.map(x => {
+  return doing;
+}
+
+function todoCardHtml(x){
     const overdue=isTaskOverdue(x),unscheduled=!isTaskScheduled(x,state.viewDate);
     const alert=overdue?`<em class="todo-alert overdue-alert">! 已逾期</em>`:unscheduled?`<em class="todo-alert unscheduled-alert">待排期</em>`:"";
     return `<article class="focus-item todo-card ${overdue?"is-overdue":unscheduled?"is-unscheduled":""}" draggable="true" data-todo-key="${x.sourceKey}" style="--c:${colors[x.area] || colors.admin}"><div class="todo-card-top"><span class="todo-grip" title="拖拽排序或安排时间">⠿</span><button class="todo-check" data-complete-action="${x.sourceKey}" aria-label="完成待办"><i></i></button><button class="todo-main" data-edit-action="${x.sourceKey}"><span><span class="todo-title-line"><b>${escapeHtml(x.text)}</b>${alert}</span><small>${todoMeta(x)}</small></span></button><button class="todo-delete" data-delete-todo="${x.sourceKey}" aria-label="删除待办">×</button></div>${x.notes?`<button class="todo-note" data-edit-action="${x.sourceKey}"><i>备注</i><span>${escapeHtml(x.notes)}</span></button>`:""}${x.subtasks?.length?`<div class="todo-subtasks"><div class="todo-subtasks-head"><span>子任务</span><b>${x.subtasks.filter(s=>s.done).length}/${x.subtasks.length}</b></div>${x.subtasks.map(s=>`<button class="todo-subtask ${s.done?"done":""}" data-toggle-subtask="${x.sourceKey}" data-subtask-id="${s.id}"><i>${s.done?"✓":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div>`:""}</article>`;
-  }).join("") : `<div class="empty">暂无今日行动</div>`;
 }
 
-function todoMeta(todo){const bits=[];bits.push(todo.project||todo.sourceProject||"独立待办");if(isCarriedOver(todo,state.viewDate))bits.push(`原定 ${taskDate(todo)} · 待重新安排`);else bits.push(todo.due?todo.due.replace("T"," "):todo.scheduledHour||"未安排时间");if(todo.repeat&&todo.repeat!=="none")bits.push({daily:"每天",weekdays:"工作日",weekly:"每周",monthly:"每月"}[todo.repeat]);if(todo.subtasks?.length)bits.push(`${todo.subtasks.filter(s=>s.done).length}/${todo.subtasks.length} 子任务`);return bits.join(" · ");}
+function renderFocus(steps,anytime){
+  const day=sortTodos(steps),floating=sortTodos(anytime),dayLabel=state.viewDate===localDateISO(new Date())?"今日待办":"当日待办";
+  const group=(title,items,kind)=>`<section class="todo-group ${kind}"><header><b>${title}</b><span>${items.length}</span></header>${items.length?items.map(todoCardHtml).join(""):`<div class="todo-group-empty">暂无事项</div>`}</section>`;
+  $("#focusList").innerHTML=group(dayLabel,day,"day-todos")+group("随时待办",floating,"anytime-todos");
+}
 
+function repeatLabel(todo){if(todo.repeat==="customDays")return `每 ${todo.repeatInterval||2} 天`;if(todo.repeat==="customWeekdays")return (todo.repeatWeekdays||[]).map(n=>`周${["日","一","二","三","四","五","六"][n]}`).join("、");return {daily:"每天",weekdays:"工作日",weekly:"每周",monthly:"每月"}[todo.repeat];}
+function todoMeta(todo){const bits=[];bits.push(todo.project||todo.sourceProject||"独立待办");if(isCarriedOver(todo,state.viewDate))bits.push(`原定 ${taskDate(todo)} · 待重新安排`);else bits.push(todo.due?todo.due.replace("T"," "):todo.scheduledHour||"未安排时间");if(todo.repeat&&todo.repeat!=="none")bits.push(repeatLabel(todo));if(todo.subtasks?.length)bits.push(`${todo.subtasks.filter(s=>s.done).length}/${todo.subtasks.length} 子任务`);return bits.join(" · ");}
+
+function projectMetric(project){if(project.projectType==="habit"){const count=project.checkins||0,goal=Math.max(1,project.habitGoal||30);return {html:`<strong class="habit-total"><span>已打卡</span><b>${count}</b><em>次</em></strong>`,width:Math.min(100,count/goal*100),kind:"习惯"};}const progress=pct(project.steps);return {html:`<strong>${progress}%</strong>`,width:progress,kind:"目标"};}
 
 function renderProjects() {
   const items = state.projects.map(p => ({ key:`p:${p.id}`, type:"project", data:p }))
@@ -197,11 +214,11 @@ function renderProjects() {
   state.projectOrder = [...new Set([...items.map(x=>x.key), ...state.projectOrder])];
   $("#projectGrid").innerHTML = items.map(item => {
     if (item.type === "project") {
-      const p=item.data, progress=pct(p.steps);
-      return `<article class="project-card" data-order-key="${item.key}" style="--c:${colors[p.area]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(p.title)}</b><strong>${progress}%</strong></div><div class="progress"><i style="width:${progress}%"></i></div><div class="step-row">${p.steps.map(s => `<button class="step-dot s${s.status}" data-step="${s.id}" title="${statusText(s.status)}"><i>${s.status===2?"✓":s.status===1?"•":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div><button class="project-edit" data-project="${p.id}">编辑项目</button></article>`;
+      const p=item.data, metric=projectMetric(p);
+      return `<article class="project-card ${p.projectType==="habit"?"habit-project":"target-project"}" data-order-key="${item.key}" style="--c:${colors[p.area]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(p.title)}</b>${metric.html}</div><div class="project-source"><i>${metric.kind}</i> · ${state.areas.find(a=>a.id===p.area)?.name||p.area}</div><div class="progress"><i style="width:${metric.width}%"></i></div><div class="step-row">${p.steps.map(s => `<button class="step-dot s${s.status}" data-step="${s.id}" title="${statusText(s.status)}"><i>${s.status===2?"✓":s.status===1?"•":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div><button class="project-edit" data-project="${p.id}">编辑项目</button></article>`;
     }
-    const t=item.data, a=item.area, progress=pct(t.steps);
-    return `<article class="project-card" data-order-key="${item.key}" style="--c:${colors[a.id]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(t.text)}</b><strong>${progress}%</strong></div><div class="project-source">${a.name} · 来自领域仪表盘</div><div class="progress"><i style="width:${progress}%"></i></div><div class="step-row">${t.steps.map(s=>`<button class="step-dot s${s.status}" data-area-project-step="${s.id}" title="${statusText(s.status)}"><i>${s.status===2?"✓":s.status===1?"•":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div><button class="project-edit" data-area-project="${t.id}">编辑项目</button></article>`;
+    const t=item.data, a=item.area, metric=projectMetric(t);
+    return `<article class="project-card ${t.projectType==="habit"?"habit-project":"target-project"}" data-order-key="${item.key}" style="--c:${colors[a.id]}"><span class="drag-handle" draggable="true" data-drag-key="${item.key}" title="拖拽调整顺序">⠿</span><div class="project-title"><b>${escapeHtml(t.text)}</b>${metric.html}</div><div class="project-source"><i>${metric.kind}</i> · ${a.name} · 来自领域仪表盘</div><div class="progress"><i style="width:${metric.width}%"></i></div><div class="step-row">${t.steps.map(s=>`<button class="step-dot s${s.status}" data-area-project-step="${s.id}" title="${statusText(s.status)}"><i>${s.status===2?"✓":s.status===1?"•":""}</i><span>${escapeHtml(s.text)}</span></button>`).join("")}</div><button class="project-edit" data-area-project="${t.id}">编辑项目</button></article>`;
   }).join("");
 }
 
@@ -210,23 +227,24 @@ function renderAreas() {
 }
 
 function renderSignals(steps) {
-  const projectAverage=state.projects.length?Math.round(state.projects.reduce((n,p)=>n+pct(p.steps),0)/state.projects.length):0;
-  const areaAverage=state.areas.length?Math.round(state.areas.reduce((n,a)=>n+(a.tasks.length?(a.tasks.filter(t=>t.status>0).length/a.tasks.length*100):0),0)/state.areas.length):0;
-  const today=localDateISO(new Date()),todayDone=state.activityLog.filter(x=>x.date===today).length;
-  const rows=[["今",todayDone,"今日完成"],["项",`${projectAverage}%`,"项目平均进度"],["域",`${areaAverage}%`,"领域活跃度"],["开",steps.filter(x=>x.status<2).length,"开放任务"]];
-  $(".signals-panel h2").textContent="数据概览";$(".signals-panel header span").textContent="自动汇总";
+  const targets=state.projects.filter(p=>p.projectType!=="habit"),projectAverage=targets.length?Math.round(targets.reduce((n,p)=>n+pct(p.steps),0)/targets.length):0;
+  const habits=state.projects.filter(p=>p.projectType==="habit").reduce((n,p)=>n+(p.checkins||0),0)+state.areas.flatMap(a=>a.tasks).filter(t=>t.projectType==="habit").reduce((n,t)=>n+(t.checkins||0),0);
+  const selectedDone=state.activityLog.filter(x=>x.date===state.viewDate).length,rows=[[String(Number(state.viewDate.slice(8))),selectedDone,"当日完成"],["目",`${projectAverage}%`,"目标平均进度"],["习",habits,"累计习惯打卡"],["开",allSteps().filter(x=>x.status===1).length,"开放任务"]];
+  $(".signals-panel h2").textContent="数据概览";$(".signals-panel header span").textContent=`${state.viewDate.replaceAll("-","/")} ${weekdayText(state.viewDate)}`;
   $("#signals").innerHTML=rows.map(r=>`<div><i>${r[0]}</i><span><b>${r[1]}</b><small>${r[2]}</small></span></div>`).join("");
 }
 
+function habitContextForItem(todo){const project=state.projects.find(p=>p.steps.includes(todo));if(project?.projectType==="habit")return {owner:project,area:project.area};for(const area of state.areas){const task=area.tasks.find(t=>t.steps?.includes(todo));if(task?.projectType==="habit")return {owner:task,area:area.id};}return null;}
 function completeTodo(key){
   const todo=sourceItem(key);if(!todo)return;
   const date=state.viewDate||localDateISO(new Date());
-  if(todo.repeat&&todo.repeat!=="none"){if(!Array.isArray(todo.completions))todo.completions=[];if(!todo.completions.includes(date))todo.completions.push(date);}else todo.status=2;
+  const habit=habitContextForItem(todo);
+  if(habit){habit.owner.checkins=(habit.owner.checkins||0)+1;todo.status=1;}else if(todo.repeat&&todo.repeat!=="none"){if(!Array.isArray(todo.completions))todo.completions=[];if(!todo.completions.includes(date))todo.completions.push(date);}else todo.status=2;
   if(!Array.isArray(state.activityLog))state.activityLog=[];
-  if(!state.activityLog.some(x=>x.key===key&&x.date===date))state.activityLog.push({id:`log${Date.now()}`,key,date,text:todo.text||"完成任务",area:actionContext(key).area,completedAt:new Date().toISOString()});
+  if(habit||!state.activityLog.some(x=>x.key===key&&x.date===date))state.activityLog.push({id:`log${Date.now()}`,key:habit?`habit:${habit.owner.id}:${key}:${Date.now()}`:key,date,text:habit?`${habit.owner.text||habit.owner.title} · ${todo.text}`:todo.text||"完成任务",area:habit?.area||actionContext(key).area,completedAt:new Date().toISOString()});
   // 先持久化，再播放清晰的完成反馈，最后统一刷新待办与时间轴。
   localStorage.setItem(KEY,JSON.stringify(state));scheduleCloudSave();
-  const remaining=allSteps().filter(x=>occursOn(x,date)&&x.status===1);
+  const remaining=allSteps().filter(x=>occursOn(x,date)&&x.status===1&&!isAnytime(x));
   $("#statDoing").textContent=remaining.length;
   $("#statScheduled").textContent=remaining.filter(x=>isTaskScheduled(x,date)).length;
   $("#statDone").textContent=state.activityLog.filter(x=>x.date===date).length;
@@ -238,12 +256,13 @@ function completeTodo(key){
 }
 
 function cycleStep(id) {
-  let changed;
-  for (const p of state.projects) { const s=p.steps.find(x=>x.id===id); if(s){ s.status=(s.status+1)%3; changed=s; break; } }
+  let changed,habitOwner,habitArea;
+  for (const p of state.projects) { const s=p.steps.find(x=>x.id===id); if(s){if(p.projectType==="habit"&&s.status===1){p.checkins=(p.checkins||0)+1;s.status=1;habitOwner=p;habitArea=p.area;}else s.status=(s.status+1)%3;changed=s;break;} }
   if (!changed) { const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(id)); if(t){ t.status=(t.status+1)%3; changed=t; } }
-  if (!changed) { const found=findAreaProjectStep(id); if(found){ found.step.status=(found.step.status+1)%3; changed=found.step; } }
+  if (!changed) { const found=findAreaProjectStep(id); if(found){if(found.task.projectType==="habit"&&found.step.status===1){found.task.checkins=(found.task.checkins||0)+1;found.step.status=1;habitOwner=found.task;habitArea=found.area.id;}else found.step.status=(found.step.status+1)%3;changed=found.step; } }
   if (!changed) { const q=state.quick.find(x=>x.id===id); if(q){ q.status=(q.status+1)%3; changed=q; } }
   if (changed) {
+    if(habitOwner){const date=localDateISO(new Date());state.activityLog.push({id:`habit${Date.now()}`,key:`habit:${habitOwner.id}:${changed.id}`,date,text:`${habitOwner.text||habitOwner.title} · ${changed.text}`,area:habitArea||"admin",completedAt:new Date().toISOString()});}
     save();
     const modalStep = document.querySelector(`#modal [data-step="${id}"]`);
     if (modalStep) { const project=state.projects.find(p=>p.steps.includes(changed)); if(project)openProject(project.id); }
@@ -259,7 +278,7 @@ function openArea(id) {
 function openProject(id) {
   const p=state.projects.find(x=>x.id===id);
   const doneCount=p.steps.filter(s=>s.status===2).length;
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[p.area]}"><span>PROJECT</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(p.title)}" data-edit-project-name="${p.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-project="${p.id}">删除项目</button></div><p>名称和每一步都能直接编辑；拖动左侧把手调整顺序。</p></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${p.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="project" data-modal-parent="${p.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newStep" placeholder="拆解新的项目步骤"><button type="button" data-add-step="${id}">添加</button></div>`;
+  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[p.area]}"><span>PROJECT</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(p.title)}" data-edit-project-name="${p.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-project="${p.id}">删除项目</button></div><p>目标按步骤计算进度；习惯每次完成在做步骤会累计打卡。</p><div class="project-settings"><label><span>项目类型</span><select data-edit-project-type="${p.id}"><option value="target" ${p.projectType==="target"?"selected":""}>目标</option><option value="habit" ${p.projectType==="habit"?"selected":""}>习惯</option></select></label><label class="habit-goal-setting ${p.projectType==="habit"?"visible":""}"><span>阶段打卡目标</span><input type="number" min="1" value="${p.habitGoal||30}" data-edit-habit-goal="${p.id}"></label></div></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${p.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="project" data-modal-parent="${p.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newStep" placeholder="拆解新的项目步骤"><button type="button" data-add-step="${id}">添加</button></div>`;
   if (!$("#modal").open) $("#modal").showModal();
 }
 
@@ -268,7 +287,7 @@ function openAreaProject(taskId) {
   const task=area?.tasks.find(t=>String(t.id)===String(taskId));
   if (!task) return;
   const doneCount=task.steps.filter(s=>s.status===2).length;
-  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[area.id]}"><span>${area.name} · FROM DASHBOARD</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(task.text)}" data-edit-area-project="${task.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-area-project="${task.id}">删除项目</button></div><p>可以修改标题、拆解步骤，并拖动左侧把手调整顺序。</p></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${task.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="areaProject" data-modal-parent="${task.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-area-project-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-area-project-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-area-project-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newAreaProjectStep" placeholder="拆解新的项目步骤"><button type="button" data-add-area-project-step="${task.id}">添加</button></div>`;
+  $("#modalBody").innerHTML=`<div class="modal-head" style="--c:${colors[area.id]}"><span>${area.name} · FROM DASHBOARD</span><div class="project-name-row"><input class="project-name-input" value="${escapeHtml(task.text)}" data-edit-area-project="${task.id}" aria-label="项目名称"><button type="button" class="delete-project" data-delete-area-project="${task.id}">删除项目</button></div><p>目标按步骤计算进度；习惯每次完成在做步骤会累计打卡。</p><div class="project-settings"><label><span>项目类型</span><select data-edit-area-project-type="${task.id}"><option value="target" ${task.projectType==="target"?"selected":""}>目标</option><option value="habit" ${task.projectType==="habit"?"selected":""}>习惯</option></select></label><label class="habit-goal-setting ${task.projectType==="habit"?"visible":""}"><span>阶段打卡目标</span><input type="number" min="1" value="${task.habitGoal||30}" data-edit-area-habit-goal="${task.id}"></label></div></div>${doneCount?`<button type="button" class="completed-steps-toggle" data-toggle-completed aria-expanded="false"><span>已完成</span><b>${doneCount}</b><i>展开</i></button>`:""}<div class="modal-steps collapsible-completed">${task.steps.map(s=>`<div class="modal-sort-item ${s.status===2?"completed-step":""}" draggable="true" data-modal-type="areaProject" data-modal-parent="${task.id}" data-modal-key="${s.id}"><span class="modal-grip">⠿</span><button type="button" class="status-pill s${s.status}" data-area-project-step="${s.id}">${statusText(s.status)}</button><input class="step-name-input" value="${escapeHtml(s.text)}" data-edit-area-project-step="${s.id}" aria-label="步骤名称"><button type="button" data-delete-area-project-step="${s.id}" aria-label="删除步骤">×</button></div>`).join("")}</div><div class="add-row"><input id="newAreaProjectStep" placeholder="拆解新的项目步骤"><button type="button" data-add-area-project-step="${task.id}">添加</button></div>`;
   if (!$("#modal").open) $("#modal").showModal();
 }
 
@@ -294,16 +313,20 @@ function openTodoEditor(key=""){
   const data=todo||{text:"",due:"",repeat:"none",notes:"",subtasks:[],area:"admin"};
   const subtaskRows=(data.subtasks||[]).map(s=>subtaskEditorRow(s)).join("");
   const dateValue=data.due?.slice(0,10)||data.scheduledDate||"", timeValue=data.due?.includes("T")?data.due.slice(11,16):(data.scheduledHour||"");
-  $("#modalBody").innerHTML=`<div class="modal-head todo-editor-head" style="--c:${colors[context.area]||colors.admin}"><span>TASK DETAILS</span><h2>${todo?"编辑任务":"新建今日待办"}</h2><p>${key&&!key.startsWith("quick:")?`来自项目：${escapeHtml(context.project)}。把大步骤继续细化为可执行的子任务。`:"记录任务，并按需要继续拆解子任务。"}</p></div><div class="todo-form"><label><span>任务标题</span><input id="todoTitle" value="${escapeHtml(data.text)}" placeholder="例如：游泳"></label><div class="schedule-fields"><label><span>日期</span><div class="schedule-input"><input id="todoDate" type="date" value="${dateValue}"><button type="button" data-clear-todo-date>清除</button></div></label><label><span>时间 <small>选填</small></span><div class="schedule-input"><input id="todoTime" type="time" value="${timeValue}"><button type="button" data-clear-todo-time>清除</button></div></label><label><span>重复</span><select id="todoRepeat"><option value="none">不重复</option><option value="daily">每天</option><option value="weekdays">工作日</option><option value="weekly">每周</option><option value="monthly">每月</option></select></label></div><label><span>备注</span><textarea id="todoNotes" rows="3" placeholder="地点、准备物品、联系方式……">${escapeHtml(data.notes||"")}</textarea></label><div class="subtask-editor"><div class="subtask-editor-title"><span>子任务</span><small>逐条添加具体动作</small></div><div id="todoSubtaskRows" class="subtask-editor-list">${subtaskRows}</div><div class="subtask-add-row"><input id="newSubtaskInput" placeholder="输入一个子任务"><button type="button" data-add-subtask-row>＋ 添加</button></div></div><button type="button" class="todo-save" data-save-action="${key}" data-action-area="${context.area}" data-action-project="${escapeHtml(context.project)}">${todo?"保存任务":"加入今日待办"}</button></div>`;
+  const weekdayChecks=[1,2,3,4,5,6,0].map(n=>`<label><input type="checkbox" value="${n}" data-repeat-weekday ${(data.repeatWeekdays||[]).map(Number).includes(n)?"checked":""}><span>${["日","一","二","三","四","五","六"][n]}</span></label>`).join("");
+  $("#modalBody").innerHTML=`<div class="modal-head todo-editor-head" style="--c:${colors[context.area]||colors.admin}"><span>TASK DETAILS</span><h2>${todo?"编辑任务":"新建待办"}</h2><p>${key&&!key.startsWith("quick:")?`来自项目：${escapeHtml(context.project)}。把大步骤继续细化为可执行的子任务。`:"不设日期会进入随时待办；设置日期后进入对应日期。"}</p></div><div class="todo-form"><label><span>任务标题</span><input id="todoTitle" value="${escapeHtml(data.text)}" placeholder="例如：游泳"></label><div class="schedule-fields"><label><span>日期</span><div class="schedule-input"><input id="todoDate" type="date" value="${dateValue}"><button type="button" data-clear-todo-date>清除</button></div></label><label><span>时间 <small>选填</small></span><div class="schedule-input"><input id="todoTime" type="time" value="${timeValue}"><button type="button" data-clear-todo-time>清除</button></div></label><label><span>重复</span><select id="todoRepeat"><option value="none">不重复</option><option value="daily">每天</option><option value="weekdays">工作日</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="customDays">每隔几天</option><option value="customWeekdays">每周指定日期</option></select></label></div><div class="custom-repeat" id="customRepeat"><div class="repeat-interval"><span>每</span><input id="repeatInterval" type="number" min="2" max="365" value="${Math.max(2,data.repeatInterval||2)}"><span>天重复</span></div><div class="repeat-weekdays">${weekdayChecks}</div></div><label><span>备注</span><textarea id="todoNotes" rows="3" placeholder="地点、准备物品、联系方式……">${escapeHtml(data.notes||"")}</textarea></label><div class="subtask-editor"><div class="subtask-editor-title"><span>子任务</span><small>逐条添加具体动作</small></div><div id="todoSubtaskRows" class="subtask-editor-list">${subtaskRows}</div><div class="subtask-add-row"><input id="newSubtaskInput" placeholder="输入一个子任务"><button type="button" data-add-subtask-row>＋ 添加</button></div></div><button type="button" class="todo-save" data-save-action="${key}" data-action-area="${context.area}" data-action-project="${escapeHtml(context.project)}">${todo?"保存任务":"加入待办"}</button></div>`;
   $("#todoRepeat").value=data.repeat||"none";
+  updateRepeatEditorVisibility();
   if(!$("#modal").open)$("#modal").showModal();
   $("#todoTitle").focus();
 }
 
+function updateRepeatEditorVisibility(){const value=$("#todoRepeat")?.value,box=$("#customRepeat");if(!box)return;box.classList.toggle("show-interval",value==="customDays");box.classList.toggle("show-weekdays",value==="customWeekdays");}
+
 function subtaskEditorRow(subtask={id:"",text:"",done:false}){return `<div class="subtask-editor-row" data-subtask-row data-subtask-id="${subtask.id||`sub${Date.now()}`}" data-subtask-done="${subtask.done?"1":"0"}"><i class="subtask-row-dot"></i><input data-subtask-text value="${escapeHtml(subtask.text||"")}" placeholder="子任务内容"><button type="button" data-remove-subtask-row aria-label="删除子任务">×</button></div>`;}
 
 function openNewProject(){
-  $("#modalBody").innerHTML=`<div class="modal-head"><span>NEW PROJECT</span><h2>新建项目</h2><p>先给项目一个名字和所属领域，再逐步拆解。</p></div><div class="form-stack"><input id="projectName" placeholder="项目名称"><select id="projectArea">${state.areas.map(a=>`<option value="${a.id}">${a.name} · ${a.cn}</option>`).join("")}</select><button type="button" data-create-project>创建项目</button></div>`; $("#modal").showModal();
+  $("#modalBody").innerHTML=`<div class="modal-head"><span>NEW PROJECT</span><h2>新建项目</h2><p>目标用于推进结果，习惯用于持续累计打卡。</p></div><div class="form-stack"><input id="projectName" placeholder="项目名称"><select id="projectArea">${state.areas.map(a=>`<option value="${a.id}">${a.name} · ${a.cn}</option>`).join("")}</select><select id="projectType"><option value="target">目标项目</option><option value="habit">习惯项目</option></select><label class="new-habit-goal"><span>阶段打卡目标</span><input id="projectHabitGoal" type="number" min="1" value="30"></label><button type="button" data-create-project>创建项目</button></div>`; $("#modal").showModal();
 }
 
 document.addEventListener("click", e => {
@@ -327,7 +350,7 @@ document.addEventListener("click", e => {
   if(completedToggle){const list=completedToggle.nextElementSibling,expanded=completedToggle.getAttribute("aria-expanded")!=="true";completedToggle.setAttribute("aria-expanded",String(expanded));completedToggle.querySelector("i").textContent=expanded?"收起":"展开";list?.classList.toggle("show-completed",expanded);return;}
   const step=e.target.closest("[data-step]"); if(step) return cycleStep(step.dataset.step);
   const areaProjectStep=e.target.closest("[data-area-project-step]");
-  if(areaProjectStep){ const found=findAreaProjectStep(areaProjectStep.dataset.areaProjectStep); if(found){found.step.status=(found.step.status+1)%3;save(); if($("#modal").open) openAreaProject(found.task.id);} return; }
+  if(areaProjectStep){const found=findAreaProjectStep(areaProjectStep.dataset.areaProjectStep);if(found){cycleStep(areaProjectStep.dataset.areaProjectStep);if($("#modal").open)openAreaProject(found.task.id);}return;}
   const areaProject=e.target.closest("[data-area-project]"); if(areaProject) return openAreaProject(areaProject.dataset.areaProject);
   const area=e.target.closest("[data-area]"); if(area) return openArea(area.dataset.area);
   const project=e.target.closest("[data-project]"); if(project) return openProject(project.dataset.project);
@@ -340,7 +363,7 @@ document.addEventListener("click", e => {
   if(e.target.matches("[data-remove-subtask-row]")){e.target.closest("[data-subtask-row]")?.remove();return;}
   const subtask=e.target.closest("[data-toggle-subtask]");if(subtask){const todo=sourceItem(subtask.dataset.toggleSubtask);const item=todo?.subtasks.find(s=>String(s.id)===String(subtask.dataset.subtaskId));if(item){item.done=!item.done;save();}return;}
   const completeAction=e.target.closest("[data-complete-action]");if(completeAction){completeTodo(completeAction.dataset.completeAction);return;}
-  if(e.target.matches("[data-save-action]")){const title=$("#todoTitle").value.trim();if(!title)return;let key=e.target.dataset.saveAction,todo=key?sourceItem(key):null;if(!todo){todo={id:"q"+Date.now(),status:1,area:e.target.dataset.actionArea||"admin",sourceProject:e.target.dataset.actionProject||"独立待办",subtasks:[]};state.quick.push(todo);key=`quick:${todo.id}`;}todo.text=title;const date=$("#todoDate").value,time=$("#todoTime").value;if(date){todo.due=time?`${date}T${time}`:date;todo.scheduledDate=date;}else{delete todo.due;delete todo.scheduledDate;}if(time){todo.scheduledHour=`${time.slice(0,2)}:00`;}else{delete todo.scheduledHour;delete todo.duration;}todo.repeat=$("#todoRepeat").value;todo.notes=$("#todoNotes").value.trim();const pending=$("#newSubtaskInput")?.value.trim();if(pending)$("#todoSubtaskRows").insertAdjacentHTML("beforeend",subtaskEditorRow({id:`sub${Date.now()}`,text:pending,done:false}));todo.subtasks=[...document.querySelectorAll("#todoSubtaskRows [data-subtask-row]")].map(row=>({id:row.dataset.subtaskId,text:row.querySelector("[data-subtask-text]").value.trim(),done:row.dataset.subtaskDone==="1"})).filter(s=>s.text);save();$("#modal").close();return;}
+  if(e.target.matches("[data-save-action]")){const title=$("#todoTitle").value.trim();if(!title)return;let key=e.target.dataset.saveAction,todo=key?sourceItem(key):null;if(!todo){todo={id:"q"+Date.now(),status:1,area:e.target.dataset.actionArea||"admin",sourceProject:e.target.dataset.actionProject||"独立待办",subtasks:[]};state.quick.push(todo);key=`quick:${todo.id}`;}todo.text=title;const date=$("#todoDate").value,time=$("#todoTime").value;if(date){todo.due=time?`${date}T${time}`:date;todo.scheduledDate=date;}else{delete todo.due;delete todo.scheduledDate;}if(time){todo.scheduledHour=`${time.slice(0,2)}:00`;}else{delete todo.scheduledHour;delete todo.duration;}todo.repeat=$("#todoRepeat").value;todo.repeatInterval=Math.max(2,Number($("#repeatInterval")?.value)||2);todo.repeatWeekdays=[...document.querySelectorAll("[data-repeat-weekday]:checked")].map(x=>Number(x.value));if(todo.repeat==="customWeekdays"&&!todo.repeatWeekdays.length)todo.repeatWeekdays=[new Date(`${state.viewDate}T12:00:00`).getDay()];if(todo.repeat!=="none"&&!taskDate(todo))todo.scheduledDate=state.viewDate;todo.notes=$("#todoNotes").value.trim();const pending=$("#newSubtaskInput")?.value.trim();if(pending)$("#todoSubtaskRows").insertAdjacentHTML("beforeend",subtaskEditorRow({id:`sub${Date.now()}`,text:pending,done:false}));todo.subtasks=[...document.querySelectorAll("#todoSubtaskRows [data-subtask-row]")].map(row=>({id:row.dataset.subtaskId,text:row.querySelector("[data-subtask-text]").value.trim(),done:row.dataset.subtaskDone==="1"})).filter(s=>s.text);save();$("#modal").close();return;}
   if(e.target.matches("[data-delete-todo]")){ const key=e.target.dataset.deleteTodo; const [type,...parts]=key.split(":"); const id=parts.join(":"); if(type==="pstep") state.projects.forEach(p=>p.steps=p.steps.filter(s=>String(s.id)!==id)); if(type==="atask") state.areas.forEach(a=>a.tasks=a.tasks.filter(t=>String(t.id)!==id)); if(type==="astep") { const found=findAreaProjectStep(id); if(found) found.task.steps=found.task.steps.filter(s=>String(s.id)!==id); } if(type==="quick") state.quick=state.quick.filter(q=>String(q.id)!==id); state.todoOrder=state.todoOrder.filter(k=>k!==key); save(); return; }
   if(e.target.matches("[data-area-step]")){ const id=e.target.dataset.areaStep; const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(id)); if(t){t.status=(t.status+1)%2;save(); const area=state.areas.find(a=>a.tasks.includes(t)); openArea(area.id);} return; }
   if(e.target.matches("[data-add-task]")){ const input=$("#newTask"); if(input.value.trim()){state.areas.find(a=>a.id===e.target.dataset.addTask).tasks.push({id:Date.now(),text:input.value.trim(),status:0,steps:[]});save();openArea(e.target.dataset.addTask);} }
@@ -351,12 +374,18 @@ document.addEventListener("click", e => {
   if(e.target.matches("[data-add-area-project-step]")){ const taskId=e.target.dataset.addAreaProjectStep; const input=$("#newAreaProjectStep"); const task=state.areas.flatMap(a=>a.tasks).find(t=>String(t.id)===String(taskId)); if(task&&input.value.trim()){task.steps.push({id:"as"+Date.now(),text:input.value.trim(),status:0});save();openAreaProject(taskId);} }
   if(e.target.matches("[data-delete-area-project-step]")){ const found=findAreaProjectStep(e.target.dataset.deleteAreaProjectStep); if(found){found.task.steps=found.task.steps.filter(s=>String(s.id)!==String(e.target.dataset.deleteAreaProjectStep));save();openAreaProject(found.task.id);} }
   if(e.target.matches("[data-delete-area-project]")){ const id=e.target.dataset.deleteAreaProject; if(confirm("确定删除这个项目吗？它也会从领域仪表盘中删除。")){state.areas.forEach(a=>a.tasks=a.tasks.filter(t=>String(t.id)!==String(id)));state.projectOrder=state.projectOrder.filter(k=>k!==`a:${id}`);save();$("#modal").close();} }
-  if(e.target.matches("[data-create-project]")){ const name=$("#projectName").value.trim(); if(name){state.projects.push({id:"p"+Date.now(),title:name,area:$("#projectArea").value,steps:[]});save();$("#modal").close();} }
+  if(e.target.matches("[data-create-project]")){const name=$("#projectName").value.trim();if(name){state.projects.push({id:"p"+Date.now(),title:name,area:$("#projectArea").value,projectType:$("#projectType").value,checkins:0,habitGoal:Math.max(1,Number($("#projectHabitGoal").value)||30),steps:[]});save();$("#modal").close();}}
 });
 
 document.addEventListener("change", e => {
   if(e.target.matches("#calendarDate")){state.viewDate=e.target.value||localDateISO(new Date());timelineInitialized=false;save();return;}
   if(e.target.matches("#todoSortMode")){state.todoSortMode=e.target.value;save();return;}
+  if(e.target.matches("#todoRepeat")){updateRepeatEditorVisibility();return;}
+  if(e.target.matches("#projectType")){document.querySelector(".new-habit-goal")?.classList.toggle("visible",e.target.value==="habit");return;}
+  if(e.target.matches("[data-edit-project-type]")){const p=state.projects.find(x=>x.id===e.target.dataset.editProjectType);if(p){p.projectType=e.target.value;save();openProject(p.id);}return;}
+  if(e.target.matches("[data-edit-area-project-type]")){const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(e.target.dataset.editAreaProjectType));if(t){t.projectType=e.target.value;save();openAreaProject(t.id);}return;}
+  if(e.target.matches("[data-edit-habit-goal]")){const p=state.projects.find(x=>x.id===e.target.dataset.editHabitGoal);if(p){p.habitGoal=Math.max(1,Number(e.target.value)||30);save();}return;}
+  if(e.target.matches("[data-edit-area-habit-goal]")){const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(e.target.dataset.editAreaHabitGoal));if(t){t.habitGoal=Math.max(1,Number(e.target.value)||30);save();}return;}
   if (e.target.matches("[data-edit-project-name]")) {
     const p=state.projects.find(x=>x.id===e.target.dataset.editProjectName);
     if (p && e.target.value.trim()) { p.title=e.target.value.trim(); save(); }
