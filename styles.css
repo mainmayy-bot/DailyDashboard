@@ -847,3 +847,35 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   .time-task>.timeline-task-main,.time-task.no-note>.timeline-task-main,.time-task.has-note>.timeline-task-main{padding:0 6px 3px 34px!important}
   .time-task>.timeline-task-main>span,.time-task.no-note>.timeline-task-main>span,.time-task.has-note>.timeline-task-main>span{position:static!important;transform:none!important}
 }
+
+/* v37 — installable PWA shell and focused mobile navigation. */
+@media(max-width:700px){
+  body{min-height:100dvh;padding-bottom:calc(62px + env(safe-area-inset-bottom));background:#f3f5f6}
+  .app-shell{display:block!important;min-height:100dvh!important}
+  .sidebar{position:fixed!important;z-index:100!important;top:auto!important;right:0!important;bottom:0!important;left:0!important;display:block!important;width:100%!important;height:calc(58px + env(safe-area-inset-bottom))!important;border-top:1px solid rgba(208,213,217,.9)!important;border-right:0!important;border-bottom:0!important;background:rgba(248,249,250,.94)!important;padding:6px 8px env(safe-area-inset-bottom)!important;box-shadow:0 -5px 22px rgba(37,44,50,.07)!important;backdrop-filter:blur(18px)!important}
+  .sidebar .brand,.sidebar .cloud-account,.sidebar .side-summary{display:none!important}
+  .sidebar nav{display:grid!important;width:100%!important;height:46px!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:4px!important}
+  .nav-item{display:grid!important;min-width:0!important;min-height:44px!important;grid-template-columns:1fr!important;grid-template-rows:20px 14px!important;align-content:center!important;justify-items:center!important;gap:2px!important;border-radius:10px!important;padding:3px 2px!important;color:#7e858a!important;font-size:9px!important;line-height:14px!important;text-align:center!important}
+  .nav-item.active{background:#fff!important;color:#30363a!important;box-shadow:0 2px 10px rgba(38,44,49,.09)!important}
+  .nav-icon{display:block!important;width:18px!important;height:18px!important;place-self:center!important;margin:0!important;transform:none!important}
+  .main-content{display:block!important;width:100%!important;padding:7px 7px 10px!important}
+  .top-grid,.middle-grid{display:contents!important}
+  .main-content .panel{display:none!important;margin:0!important}
+  body[data-mobile-view="today"] .timeline-panel,body[data-mobile-view="today"] .signals-panel,body[data-mobile-view="inbox"] .focus-panel,body[data-mobile-view="projects"] .projects-panel,body[data-mobile-view="areas"] .areas-panel{display:block!important}
+  body[data-mobile-view="today"] .timeline-panel{height:calc(72dvh - env(safe-area-inset-bottom))!important;min-height:450px!important;max-height:650px!important}
+  body[data-mobile-view="today"] .timeline{height:calc(100% - 46px)!important}
+  body[data-mobile-view="today"] .signals-panel{margin-top:7px!important}
+  body[data-mobile-view="inbox"] .focus-panel{display:flex!important;height:calc(100dvh - 77px - env(safe-area-inset-bottom))!important;min-height:520px!important}
+  body[data-mobile-view="projects"] .projects-panel,body[data-mobile-view="areas"] .areas-panel{min-height:calc(100dvh - 77px - env(safe-area-inset-bottom))!important}
+  .panel>header{padding:11px 10px 8px!important}
+  .panel>header h2{font-size:14px!important}
+  .project-grid,.area-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;padding:0 8px 10px!important}
+  .signals{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(display-mode:standalone){
+  body{overscroll-behavior-y:none}
+  .main-content{padding-top:max(7px,env(safe-area-inset-top))}
+}
+.pwa-status{position:fixed;z-index:150;right:12px;bottom:14px;max-width:260px;border:1px solid #e2d4b8;border-radius:9px;background:#fff9ed;padding:8px 11px;color:#80683d;font-size:9px;box-shadow:0 7px 24px rgba(45,42,36,.12);opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .2s,transform .2s}
+body.is-offline .pwa-status{opacity:1;transform:none}
+@media(max-width:700px){.pwa-status{right:9px;bottom:calc(68px + env(safe-area-inset-bottom));left:9px;max-width:none;text-align:center}}

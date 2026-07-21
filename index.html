@@ -3,10 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f5f6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="行动台" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>人生行动台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260721-centered-content-group-v36" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./app-icon-192.png" />
+    <link rel="stylesheet" href="./styles.css?v=20260721-pwa-v37" />
   </head>
-  <body>
+  <body data-mobile-view="today">
     <main class="app-shell">
       <aside class="sidebar">
         <div class="brand"><b>行</b><div><strong>人生行动台</strong><small>I'M NOT DOING SHIT TODAY</small></div></div>
@@ -69,6 +77,8 @@
       </section>
     </main>
 
+    <div id="pwaStatus" class="pwa-status" role="status" aria-live="polite">当前处于离线状态，修改会先保存在本机</div>
+
     <dialog id="modal">
       <form method="dialog" class="modal-card" id="modalCard">
         <button class="modal-close" value="cancel" aria-label="关闭">×</button>
@@ -76,6 +86,6 @@
       </form>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./app.js?v=20260721-centered-content-group-v36"></script>
+    <script src="./app.js?v=20260721-pwa-v37"></script>
   </body>
 </html>

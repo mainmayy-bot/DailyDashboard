@@ -422,6 +422,15 @@ function openNewProject(){
   $("#modalBody").innerHTML=`<div class="modal-head"><span>NEW PROJECT</span><h2>新建项目</h2><p>目标用于推进结果，习惯用于持续累计打卡。</p></div><div class="form-stack"><input id="projectName" placeholder="项目名称"><select id="projectArea">${state.areas.map(a=>`<option value="${a.id}">${a.name} · ${a.cn}</option>`).join("")}</select><select id="projectType"><option value="target">目标项目</option><option value="habit">习惯项目</option></select><label class="new-habit-goal"><span>阶段打卡目标</span><input id="projectHabitGoal" type="number" min="1" value="30"></label><button type="button" data-create-project>创建项目</button></div>`; $("#modal").showModal();
 }
 
+const MOBILE_VIEW_KEY="daily-dashboard-mobile-view";
+function setMobileView(view,scroll=true){
+  const allowed=["today","inbox","projects","areas"],next=allowed.includes(view)?view:"today";
+  document.body.dataset.mobileView=next;
+  localStorage.setItem(MOBILE_VIEW_KEY,next);
+  document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item.dataset.view===next));
+  if(scroll)window.scrollTo({top:0,behavior:"smooth"});
+}
+
 document.addEventListener("click", e => {
   if(e.target.closest("#cloudAccount")){openCloudAccount();return;}
   if(e.target.matches("[data-cloud-signin]")){cloudAuth("signin");return;}
@@ -430,6 +439,7 @@ document.addEventListener("click", e => {
   if(e.target.matches("[data-cloud-signout]")){cloudClient?.auth.signOut();cloudUser=null;cloudReady=false;cloudStatus="本机保存";updateCloudButton();$("#modal").close();return;}
   const nav=e.target.closest(".nav-item");
   if(nav){
+    if(window.matchMedia("(max-width: 700px)").matches){setMobileView(nav.dataset.view);return;}
     document.querySelectorAll(".nav-item").forEach(x=>x.classList.toggle("active",x===nav));
     const targets={today:".timeline-panel",projects:".projects-panel",areas:".areas-panel",inbox:".focus-panel"};
     document.querySelector(targets[nav.dataset.view])?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -691,3 +701,19 @@ $("#sideProjects")?.addEventListener("scroll", e => {
 },{passive:true});
 render();
 initCloud();
+if(window.matchMedia("(max-width: 700px)").matches)setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"today",false);
+window.matchMedia("(max-width: 700px)").addEventListener?.("change",event=>{if(event.matches)setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"today",false);});
+const updateOnlineStatus=()=>document.body.classList.toggle("is-offline",!navigator.onLine);
+window.addEventListener("online",updateOnlineStatus);
+window.addEventListener("offline",updateOnlineStatus);
+updateOnlineStatus();
+
+if("serviceWorker" in navigator&&location.protocol!=="file:"){
+  window.addEventListener("load",async()=>{
+    try{
+      const registration=await navigator.serviceWorker.register("./sw.js");
+      await registration.update();
+      if(registration.waiting)registration.waiting.postMessage({type:"SKIP_WAITING"});
+    }catch(error){console.warn("PWA service worker registration failed",error);}
+  });
+}
