@@ -829,3 +829,21 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .time-task>.timeline-task-main,.time-task.no-note>.timeline-task-main,.time-task.has-note>.timeline-task-main{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;margin:0!important;padding:0!important}
 .time-task>.timeline-task-main>span{position:absolute!important;top:7px!important;right:10px!important;bottom:10px!important;left:42px!important;margin:0!important;transform:none!important}
 @media(max-width:600px){.time-task>.timeline-task-main>span{top:6px!important;right:6px!important;bottom:8px!important;left:34px!important}}
+
+/* v35 — align the title with the completion circle; center three-line notes as a block. */
+.time-task.no-note>.timeline-task-main>span{top:50%!important;bottom:auto!important;transform:translateY(-6px)!important}
+.time-task.has-note>.timeline-task-main>span{top:50%!important;bottom:auto!important;transform:translateY(-50%)!important}
+.time-task.has-note .timeline-note{display:block!important;visibility:visible!important;opacity:1!important}
+@media(max-width:600px){
+  .time-task.no-note>.timeline-task-main>span{top:50%!important;bottom:auto!important;transform:translateY(-6px)!important}
+  .time-task.has-note>.timeline-task-main>span{top:50%!important;bottom:auto!important;transform:translateY(-50%)!important}
+}
+
+/* v36 — restore the simple layout: the complete text group is visually centered. */
+.time-task>.timeline-task-main,.time-task.no-note>.timeline-task-main,.time-task.has-note>.timeline-task-main{position:absolute!important;inset:0!important;display:flex!important;width:100%!important;height:100%!important;align-items:center!important;margin:0!important;padding:0 10px 4px 42px!important}
+.time-task>.timeline-task-main>span,.time-task.no-note>.timeline-task-main>span,.time-task.has-note>.timeline-task-main>span{position:static!important;display:block!important;width:100%!important;min-width:0!important;margin:0!important;transform:none!important}
+.time-task.has-note .timeline-note{display:block!important}
+@media(max-width:600px){
+  .time-task>.timeline-task-main,.time-task.no-note>.timeline-task-main,.time-task.has-note>.timeline-task-main{padding:0 6px 3px 34px!important}
+  .time-task>.timeline-task-main>span,.time-task.no-note>.timeline-task-main>span,.time-task.has-note>.timeline-task-main>span{position:static!important;transform:none!important}
+}
