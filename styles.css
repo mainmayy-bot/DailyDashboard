@@ -696,6 +696,18 @@ dialog:has(.project-detail-hero) .project-settings>label:first-child select:hove
 /* v21 — separate step controls spatially; split sidebar goals and habits. */
 dialog:has(.project-detail-hero) .detail-step-grid .detail-step-card{position:relative!important;grid-template-columns:18px 22px 24px minmax(0,1fr)!important;gap:7px!important;padding:7px 34px 7px 8px!important}
 dialog:has(.project-detail-hero) .detail-step-card .modal-grip{grid-column:1!important;grid-row:1!important}
+
+/* Mobile interaction: large reliable tap targets + long-press sorting feedback. */
+.todo-check,.timeline-complete,.step-status-orb,.area-row-status,.todo-subtask{touch-action:manipulation;position:relative;z-index:6}
+.todo-grip,.drag-handle,.modal-grip{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.touch-sorting{z-index:50!important;opacity:.72!important;transform:scale(.985)!important;box-shadow:0 12px 30px rgba(38,43,47,.16)!important}
+.touch-sort-target{border-color:var(--c,#8ba093)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--c,#8ba093),transparent 82%)!important}
+body.is-touch-sorting{cursor:grabbing;user-select:none}
+@media (pointer:coarse){
+  .todo-grip,.drag-handle,.modal-grip{touch-action:pan-y}
+  .todo-check,.timeline-complete{min-width:28px;min-height:28px;margin:-3px}
+  .step-status-orb{min-width:30px;min-height:30px}
+}
 dialog:has(.project-detail-hero) .detail-step-card .step-index{grid-column:2!important;grid-row:1!important}
 dialog:has(.project-detail-hero) .detail-step-card .step-status-orb{grid-column:3!important;grid-row:1!important;margin:0!important}
 dialog:has(.project-detail-hero) .detail-step-card>div{grid-column:4!important;grid-row:1!important}

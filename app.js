@@ -304,7 +304,7 @@ function renderAreas() {
 function renderSignals(steps) {
   const targets=state.projects.filter(p=>p.projectType!=="habit"),projectAverage=targets.length?Math.round(targets.reduce((n,p)=>n+pct(p.steps),0)/targets.length):0;
   const habits=state.projects.filter(p=>p.projectType==="habit").reduce((n,p)=>n+(p.checkins||0),0)+state.areas.flatMap(a=>a.tasks).filter(t=>t.projectType==="habit").reduce((n,t)=>n+(t.checkins||0),0);
-  const selectedDone=state.activityLog.filter(x=>x.date===state.viewDate).length,rows=[[String(Number(state.viewDate.slice(8))),selectedDone,"当日完成"],["目",`${projectAverage}%`,"目标平均进度"],["习",habits,"累计习惯打卡"],["开",allSteps().filter(x=>x.status===1).length,"开放任务"]];
+  const selectedDone=state.activityLog.filter(x=>x.date===state.viewDate).length,rows=[["今",selectedDone,"当日完成"],["目",`${projectAverage}%`,"目标平均进度"],["习",habits,"累计习惯打卡"],["开",allSteps().filter(x=>x.status===1).length,"开放任务"]];
   $(".signals-panel h2").textContent="数据概览";$(".signals-panel header span").textContent=`${state.viewDate.replaceAll("-","/")} ${weekdayText(state.viewDate)}`;
   $("#signals").innerHTML=rows.map(r=>`<div><i>${r[0]}</i><span><b>${r[1]}</b><small>${r[2]}</small></span></div>`).join("");
 }
@@ -545,6 +545,119 @@ document.addEventListener("drop", e => {
   draggedProjectKey=""; save();
 });
 document.addEventListener("dragend", e => { e.target.closest(".project-card,.focus-item,.modal-sort-item")?.classList.remove("dragging"); document.querySelectorAll(".project-card.drag-over,.modal-sort-item.drag-over").forEach(x=>x.classList.remove("drag-over")); draggedProjectKey=""; draggedTodoKey=""; draggedModalItem=null; });
+
+// Mobile browsers do not implement HTML5 drag/drop consistently. Keep tap actions
+// independent, and use a short long-press on the visible grip for touch sorting.
+let mobileTouchSort=null, suppressMobileClickUntil=0;
+const mobileSortHandleSelector=".todo-grip,.drag-handle,.modal-grip";
+const mobileActionSelector="[data-complete-action],[data-step],[data-area-project-step],[data-area-step],[data-toggle-subtask]";
+
+function moveBefore(list,sourceKey,targetKey,keyOf=x=>String(x.id)){
+  const from=list.findIndex(x=>keyOf(x)===String(sourceKey));
+  const to=list.findIndex(x=>keyOf(x)===String(targetKey));
+  if(from<0||to<0||from===to)return false;
+  const [moved]=list.splice(from,1);
+  list.splice(to,0,moved);
+  return true;
+}
+
+function finishMobileSort(sort,target){
+  if(!target)return;
+  if(sort.type==="todo"){
+    const targetKey=target.dataset.todoKey;
+    if(targetKey&&targetKey!==sort.key){
+      const from=state.todoOrder.indexOf(sort.key);
+      if(from>=0)state.todoOrder.splice(from,1);
+      const to=state.todoOrder.indexOf(targetKey);
+      state.todoOrder.splice(to<0?state.todoOrder.length:to,0,sort.key);
+      state.todoSortMode="manual";save();
+    }
+    return;
+  }
+  if(sort.type==="project"){
+    const targetKey=target.dataset.orderKey;
+    if(targetKey&&targetKey!==sort.key){
+      const from=state.projectOrder.indexOf(sort.key);
+      if(from>=0)state.projectOrder.splice(from,1);
+      const to=state.projectOrder.indexOf(targetKey);
+      state.projectOrder.splice(to<0?state.projectOrder.length:to,0,sort.key);save();
+    }
+    return;
+  }
+  if(sort.type==="modal"&&target.dataset.modalType===sort.modalType&&target.dataset.modalParent===sort.parent){
+    let list;
+    if(sort.modalType==="area")list=state.areas.find(a=>a.id===sort.parent)?.tasks;
+    if(sort.modalType==="project")list=state.projects.find(p=>p.id===sort.parent)?.steps;
+    if(sort.modalType==="areaProject")list=state.areas.flatMap(a=>a.tasks).find(t=>String(t.id)===String(sort.parent))?.steps;
+    if(list&&moveBefore(list,sort.key,target.dataset.modalKey)){
+      save();
+      if(sort.modalType==="area")openArea(sort.parent);
+      if(sort.modalType==="project")openProject(sort.parent);
+      if(sort.modalType==="areaProject")openAreaProject(sort.parent);
+    }
+  }
+}
+
+document.addEventListener("touchstart",e=>{
+  if(e.touches.length!==1)return;
+  const handle=e.target.closest(mobileSortHandleSelector);if(!handle)return;
+  const todo=handle.closest("[data-todo-key]"),project=handle.closest("[data-order-key]"),modalItem=handle.closest("[data-modal-key]");
+  const touch=e.touches[0];
+  mobileTouchSort={handle,item:todo||project||modalItem,startX:touch.clientX,startY:touch.clientY,x:touch.clientX,y:touch.clientY,active:false,target:null};
+  if(todo)Object.assign(mobileTouchSort,{type:"todo",key:todo.dataset.todoKey,selector:"[data-todo-key]"});
+  else if(project)Object.assign(mobileTouchSort,{type:"project",key:project.dataset.orderKey,selector:"[data-order-key]"});
+  else if(modalItem)Object.assign(mobileTouchSort,{type:"modal",key:modalItem.dataset.modalKey,modalType:modalItem.dataset.modalType,parent:modalItem.dataset.modalParent,selector:"[data-modal-key]"});
+  else {mobileTouchSort=null;return;}
+  mobileTouchSort.timer=setTimeout(()=>{
+    if(!mobileTouchSort)return;
+    mobileTouchSort.active=true;mobileTouchSort.item.classList.add("touch-sorting");
+    document.body.classList.add("is-touch-sorting");
+    navigator.vibrate?.(18);
+  },300);
+},{passive:true});
+
+document.addEventListener("touchmove",e=>{
+  const sort=mobileTouchSort;if(!sort||e.touches.length!==1)return;
+  const touch=e.touches[0],distance=Math.hypot(touch.clientX-sort.startX,touch.clientY-sort.startY);
+  sort.x=touch.clientX;sort.y=touch.clientY;
+  if(!sort.active){if(distance>9){clearTimeout(sort.timer);mobileTouchSort=null;}return;}
+  e.preventDefault();
+  document.querySelectorAll(".touch-sort-target").forEach(x=>x.classList.remove("touch-sort-target"));
+  const candidate=document.elementFromPoint(sort.x,sort.y)?.closest(sort.selector);
+  if(candidate&&candidate!==sort.item){sort.target=candidate;candidate.classList.add("touch-sort-target");}
+},{passive:false});
+
+function cancelMobileSort(commit){
+  const sort=mobileTouchSort;if(!sort)return;
+  clearTimeout(sort.timer);
+  if(sort.active){
+    suppressMobileClickUntil=Date.now()+650;
+    if(commit)finishMobileSort(sort,sort.target);
+  }
+  sort.item?.classList.remove("touch-sorting");
+  document.querySelectorAll(".touch-sort-target").forEach(x=>x.classList.remove("touch-sort-target"));
+  document.body.classList.remove("is-touch-sorting");mobileTouchSort=null;
+}
+document.addEventListener("touchend",()=>cancelMobileSort(true),{passive:true});
+document.addEventListener("touchcancel",()=>cancelMobileSort(false),{passive:true});
+
+// On iOS a draggable ancestor can swallow the synthetic click. Complete directly
+// on touch release, then suppress only the duplicate synthetic click.
+document.addEventListener("pointerup",e=>{
+  if(e.pointerType!=="touch"||mobileTouchSort?.active)return;
+  const action=e.target.closest(mobileActionSelector);if(!action)return;
+  e.preventDefault();e.stopPropagation();suppressMobileClickUntil=Date.now()+650;
+  if(action.matches("[data-complete-action]")){completeTodo(action.dataset.completeAction);return;}
+  if(action.matches("[data-step]")){cycleStep(action.dataset.step);return;}
+  if(action.matches("[data-area-project-step]")){const found=findAreaProjectStep(action.dataset.areaProjectStep);if(found){cycleStep(action.dataset.areaProjectStep);if($("#modal").open)openAreaProject(found.task.id);}return;}
+  if(action.matches("[data-area-step]")){const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(action.dataset.areaStep));if(t){t.status=(t.status+1)%2;save();const area=state.areas.find(a=>a.tasks.includes(t));openArea(area.id);}return;}
+  if(action.matches("[data-toggle-subtask]")){const todo=sourceItem(action.dataset.toggleSubtask),item=todo?.subtasks.find(s=>String(s.id)===String(action.dataset.subtaskId));if(item){item.done=!item.done;save();}}
+},{passive:false});
+
+document.addEventListener("click",e=>{
+  if(Date.now()>suppressMobileClickUntil)return;
+  if(e.target.closest(`${mobileSortHandleSelector},${mobileActionSelector}`)){e.preventDefault();e.stopImmediatePropagation();}
+},true);
 
 let resizeState=null;
 document.addEventListener("pointerdown", e => {
