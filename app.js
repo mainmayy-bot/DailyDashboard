@@ -442,7 +442,7 @@ function setMobileProjectType(type){
   document.querySelectorAll("[data-mobile-project-type]").forEach(button=>button.classList.toggle("active",button.dataset.mobileProjectType===next));
 }
 
-document.addEventListener("click", e => {
+function handleAppClick(e) {
   const mobileProjectType=e.target.closest("[data-mobile-project-type]");
   if(mobileProjectType){setMobileProjectType(mobileProjectType.dataset.mobileProjectType);return;}
   if(e.target.closest("#cloudAccount")){openCloudAccount();return;}
@@ -491,7 +491,32 @@ document.addEventListener("click", e => {
   if(e.target.matches("[data-delete-area-project-step]")){ const found=findAreaProjectStep(e.target.dataset.deleteAreaProjectStep); if(found){found.task.steps=found.task.steps.filter(s=>String(s.id)!==String(e.target.dataset.deleteAreaProjectStep));save();openAreaProject(found.task.id);} }
   if(e.target.matches("[data-delete-area-project]")){ const id=e.target.dataset.deleteAreaProject; if(confirm("确定删除这个项目吗？它也会从领域仪表盘中删除。")){state.areas.forEach(a=>a.tasks=a.tasks.filter(t=>String(t.id)!==String(id)));state.projectOrder=state.projectOrder.filter(k=>k!==`a:${id}`);save();$("#modal").close();} }
   if(e.target.matches("[data-create-project]")){const name=$("#projectName").value.trim();if(name){state.projects.push({id:"p"+Date.now(),title:name,area:$("#projectArea").value,projectType:$("#projectType").value,checkins:0,habitGoal:Math.max(1,Number($("#projectHabitGoal").value)||30),steps:[]});save();$("#modal").close();}}
-});
+}
+
+// Bind controls directly as well as through delegation. Some mobile WebViews and
+// installed PWAs can lose delegated clicks when draggable/gesture layers are
+// involved; direct listeners keep every visible control independently usable.
+const DIRECT_ACTION_SELECTOR = [
+  "button", "[role='button']", "[data-area]", "[data-project]",
+  "[data-area-project]", "[data-step]", "[data-edit-action]"
+].join(",");
+function bindDirectActions(root=document){
+  const controls=[];
+  if(root.nodeType===1 && root.matches?.(DIRECT_ACTION_SELECTOR)) controls.push(root);
+  root.querySelectorAll?.(DIRECT_ACTION_SELECTOR).forEach(control=>controls.push(control));
+  controls.forEach(control=>{
+    if(control.dataset.directActionBound==="1")return;
+    control.dataset.directActionBound="1";
+    control.addEventListener("click",event=>{
+      event.stopPropagation();
+      handleAppClick(event);
+    });
+  });
+}
+bindDirectActions();
+new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>bindDirectActions(node))))
+  .observe(document.body,{childList:true,subtree:true});
+document.addEventListener("click",handleAppClick);
 
 document.addEventListener("change", e => {
   if(e.target.matches("#calendarDate")){state.viewDate=e.target.value||localDateISO(new Date());timelineInitialized=false;save();return;}

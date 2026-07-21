@@ -1,4 +1,4 @@
-const CACHE_NAME="daily-dashboard-v45";
+const CACHE_NAME="daily-dashboard-v46";
 const APP_SHELL=["./","./index.html","./styles.css","./app.js","./vendor/supabase.js","./manifest.webmanifest","./app-icon.svg","./app-icon-192-v7.png","./app-icon-512-v7.png"];
 
 self.addEventListener("install",event=>{
