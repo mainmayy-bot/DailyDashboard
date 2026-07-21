@@ -186,9 +186,6 @@ function render() {
   $(".areas-panel header>span").textContent="长期方向 · 当前重点 · 持续投入";
   $(".signals-panel h2").textContent="数据概览";
   renderTimeline(steps); renderFocus(steps,anytime); renderProjects(); renderAreas(); renderSignals(steps);
-  if(window.matchMedia("(max-width: 700px), (pointer: coarse)").matches){
-    document.querySelectorAll('[draggable="true"]').forEach(element=>{element.draggable=false;});
-  }
   $(".refine-head")?.remove(); $("#refineList")?.remove();
 }
 
@@ -425,26 +422,7 @@ function openNewProject(){
   $("#modalBody").innerHTML=`<div class="modal-head"><span>NEW PROJECT</span><h2>新建项目</h2><p>目标用于推进结果，习惯用于持续累计打卡。</p></div><div class="form-stack"><input id="projectName" placeholder="项目名称"><select id="projectArea">${state.areas.map(a=>`<option value="${a.id}">${a.name} · ${a.cn}</option>`).join("")}</select><select id="projectType"><option value="target">目标项目</option><option value="habit">习惯项目</option></select><label class="new-habit-goal"><span>阶段打卡目标</span><input id="projectHabitGoal" type="number" min="1" value="30"></label><button type="button" data-create-project>创建项目</button></div>`; $("#modal").showModal();
 }
 
-const MOBILE_VIEW_KEY="daily-dashboard-mobile-view";
-const MOBILE_PROJECT_TYPE_KEY="daily-dashboard-mobile-project-type";
-function setMobileView(view,scroll=true){
-  const allowed=["areas","projects","inbox","today"],next=allowed.includes(view)?view:"areas";
-  document.body.dataset.mobileView=next;
-  localStorage.setItem(MOBILE_VIEW_KEY,next);
-  document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item.dataset.view===next));
-  if(scroll)window.scrollTo({top:0,behavior:"smooth"});
-}
-
-function setMobileProjectType(type){
-  const next=type==="habit"?"habit":"target";
-  document.body.dataset.mobileProjectType=next;
-  localStorage.setItem(MOBILE_PROJECT_TYPE_KEY,next);
-  document.querySelectorAll("[data-mobile-project-type]").forEach(button=>button.classList.toggle("active",button.dataset.mobileProjectType===next));
-}
-
-function handleAppClick(e) {
-  const mobileProjectType=e.target.closest("[data-mobile-project-type]");
-  if(mobileProjectType){setMobileProjectType(mobileProjectType.dataset.mobileProjectType);return;}
+document.addEventListener("click", e => {
   if(e.target.closest("#cloudAccount")){openCloudAccount();return;}
   if(e.target.matches("[data-cloud-signin]")){cloudAuth("signin");return;}
   if(e.target.matches("[data-cloud-signup]")){cloudAuth("signup");return;}
@@ -452,7 +430,6 @@ function handleAppClick(e) {
   if(e.target.matches("[data-cloud-signout]")){cloudClient?.auth.signOut();cloudUser=null;cloudReady=false;cloudStatus="本机保存";updateCloudButton();$("#modal").close();return;}
   const nav=e.target.closest(".nav-item");
   if(nav){
-    if(window.matchMedia("(max-width: 700px)").matches){setMobileView(nav.dataset.view);return;}
     document.querySelectorAll(".nav-item").forEach(x=>x.classList.toggle("active",x===nav));
     const targets={today:".timeline-panel",projects:".projects-panel",areas:".areas-panel",inbox:".focus-panel"};
     document.querySelector(targets[nav.dataset.view])?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -491,32 +468,7 @@ function handleAppClick(e) {
   if(e.target.matches("[data-delete-area-project-step]")){ const found=findAreaProjectStep(e.target.dataset.deleteAreaProjectStep); if(found){found.task.steps=found.task.steps.filter(s=>String(s.id)!==String(e.target.dataset.deleteAreaProjectStep));save();openAreaProject(found.task.id);} }
   if(e.target.matches("[data-delete-area-project]")){ const id=e.target.dataset.deleteAreaProject; if(confirm("确定删除这个项目吗？它也会从领域仪表盘中删除。")){state.areas.forEach(a=>a.tasks=a.tasks.filter(t=>String(t.id)!==String(id)));state.projectOrder=state.projectOrder.filter(k=>k!==`a:${id}`);save();$("#modal").close();} }
   if(e.target.matches("[data-create-project]")){const name=$("#projectName").value.trim();if(name){state.projects.push({id:"p"+Date.now(),title:name,area:$("#projectArea").value,projectType:$("#projectType").value,checkins:0,habitGoal:Math.max(1,Number($("#projectHabitGoal").value)||30),steps:[]});save();$("#modal").close();}}
-}
-
-// Bind controls directly as well as through delegation. Some mobile WebViews and
-// installed PWAs can lose delegated clicks when draggable/gesture layers are
-// involved; direct listeners keep every visible control independently usable.
-const DIRECT_ACTION_SELECTOR = [
-  "button", "[role='button']", "[data-area]", "[data-project]",
-  "[data-area-project]", "[data-step]", "[data-edit-action]"
-].join(",");
-function bindDirectActions(root=document){
-  const controls=[];
-  if(root.nodeType===1 && root.matches?.(DIRECT_ACTION_SELECTOR)) controls.push(root);
-  root.querySelectorAll?.(DIRECT_ACTION_SELECTOR).forEach(control=>controls.push(control));
-  controls.forEach(control=>{
-    if(control.dataset.directActionBound==="1")return;
-    control.dataset.directActionBound="1";
-    control.addEventListener("click",event=>{
-      event.stopPropagation();
-      handleAppClick(event);
-    });
-  });
-}
-bindDirectActions();
-new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>bindDirectActions(node))))
-  .observe(document.body,{childList:true,subtree:true});
-document.addEventListener("click",handleAppClick);
+});
 
 document.addEventListener("change", e => {
   if(e.target.matches("#calendarDate")){state.viewDate=e.target.value||localDateISO(new Date());timelineInitialized=false;save();return;}
@@ -691,6 +643,22 @@ document.addEventListener("touchcancel",()=>cancelMobileSort(false),{passive:tru
 
 // On iOS a draggable ancestor can swallow the synthetic click. Complete directly
 // on touch release, then suppress only the duplicate synthetic click.
+document.addEventListener("pointerup",e=>{
+  if(e.pointerType!=="touch"||mobileTouchSort?.active)return;
+  const action=e.target.closest(mobileActionSelector);if(!action)return;
+  e.preventDefault();e.stopPropagation();suppressMobileClickUntil=Date.now()+650;
+  if(action.matches("[data-complete-action]")){completeTodo(action.dataset.completeAction);return;}
+  if(action.matches("[data-step]")){cycleStep(action.dataset.step);return;}
+  if(action.matches("[data-area-project-step]")){const found=findAreaProjectStep(action.dataset.areaProjectStep);if(found){cycleStep(action.dataset.areaProjectStep);if($("#modal").open)openAreaProject(found.task.id);}return;}
+  if(action.matches("[data-area-step]")){const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(action.dataset.areaStep));if(t){t.status=(t.status+1)%2;save();const area=state.areas.find(a=>a.tasks.includes(t));openArea(area.id);}return;}
+  if(action.matches("[data-toggle-subtask]")){const todo=sourceItem(action.dataset.toggleSubtask),item=todo?.subtasks.find(s=>String(s.id)===String(action.dataset.subtaskId));if(item){item.done=!item.done;save();}}
+},{passive:false});
+
+document.addEventListener("click",e=>{
+  if(Date.now()>suppressMobileClickUntil)return;
+  if(e.target.closest(`${mobileSortHandleSelector},${mobileActionSelector}`)){e.preventDefault();e.stopImmediatePropagation();}
+},true);
+
 let resizeState=null;
 document.addEventListener("pointerdown", e => {
   const handle=e.target.closest("[data-resize-key]");
@@ -723,24 +691,3 @@ $("#sideProjects")?.addEventListener("scroll", e => {
 },{passive:true});
 render();
 initCloud();
-if(window.matchMedia("(max-width: 700px)").matches){
-  setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"areas",false);
-  setMobileProjectType(localStorage.getItem(MOBILE_PROJECT_TYPE_KEY)||"target");
-}
-window.matchMedia("(max-width: 700px)").addEventListener?.("change",event=>{if(event.matches){setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"areas",false);setMobileProjectType(localStorage.getItem(MOBILE_PROJECT_TYPE_KEY)||"target");}});
-const updateOnlineStatus=()=>document.body.classList.toggle("is-offline",!navigator.onLine);
-window.addEventListener("online",updateOnlineStatus);
-window.addEventListener("offline",updateOnlineStatus);
-updateOnlineStatus();
-
-if("serviceWorker" in navigator&&location.protocol!=="file:"){
-  let refreshing=false;
-  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(!refreshing){refreshing=true;location.reload();}});
-  window.addEventListener("load",async()=>{
-    try{
-      const registration=await navigator.serviceWorker.register("./sw.js");
-      await registration.update();
-      if(registration.waiting)registration.waiting.postMessage({type:"SKIP_WAITING"});
-    }catch(error){console.warn("PWA service worker registration failed",error);}
-  });
-}
