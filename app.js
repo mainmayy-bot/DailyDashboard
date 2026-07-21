@@ -568,7 +568,7 @@ document.addEventListener("dragend", e => { e.target.closest(".project-card,.foc
 
 // Mobile browsers do not implement HTML5 drag/drop consistently. Keep tap actions
 // independent, and use a short long-press on the visible grip for touch sorting.
-let mobileTouchSort=null, suppressMobileClickUntil=0;
+let mobileTouchSort=null, suppressMobileClickUntil=0, mobileTapReplaying=false;
 const mobileSortHandleSelector=".todo-grip,.drag-handle,.modal-grip";
 const mobileActionSelector="[data-complete-action],[data-step],[data-area-project-step],[data-area-step],[data-toggle-subtask]";
 
@@ -665,18 +665,19 @@ document.addEventListener("touchcancel",()=>cancelMobileSort(false),{passive:tru
 // on touch release, then suppress only the duplicate synthetic click.
 document.addEventListener("pointerup",e=>{
   if(e.pointerType!=="touch"||mobileTouchSort?.active)return;
-  const action=e.target.closest(mobileActionSelector);if(!action)return;
-  e.preventDefault();e.stopPropagation();suppressMobileClickUntil=Date.now()+650;
-  if(action.matches("[data-complete-action]")){completeTodo(action.dataset.completeAction);return;}
-  if(action.matches("[data-step]")){cycleStep(action.dataset.step);return;}
-  if(action.matches("[data-area-project-step]")){const found=findAreaProjectStep(action.dataset.areaProjectStep);if(found){cycleStep(action.dataset.areaProjectStep);if($("#modal").open)openAreaProject(found.task.id);}return;}
-  if(action.matches("[data-area-step]")){const t=state.areas.flatMap(a=>a.tasks).find(x=>String(x.id)===String(action.dataset.areaStep));if(t){t.status=(t.status+1)%2;save();const area=state.areas.find(a=>a.tasks.includes(t));openArea(area.id);}return;}
-  if(action.matches("[data-toggle-subtask]")){const todo=sourceItem(action.dataset.toggleSubtask),item=todo?.subtasks.find(s=>String(s.id)===String(action.dataset.subtaskId));if(item){item.done=!item.done;save();}}
+  const control=e.target.closest("button,[role='button'],[data-area],[data-project],[data-area-project]");
+  if(!control)return;
+  e.preventDefault();e.stopPropagation();
+  suppressMobileClickUntil=Date.now()+700;
+  mobileTapReplaying=true;
+  control.click();
+  mobileTapReplaying=false;
 },{passive:false});
 
 document.addEventListener("click",e=>{
+  if(mobileTapReplaying)return;
   if(Date.now()>suppressMobileClickUntil)return;
-  if(e.target.closest(`${mobileSortHandleSelector},${mobileActionSelector}`)){e.preventDefault();e.stopImmediatePropagation();}
+  e.preventDefault();e.stopImmediatePropagation();
 },true);
 
 let resizeState=null;
@@ -722,6 +723,8 @@ window.addEventListener("offline",updateOnlineStatus);
 updateOnlineStatus();
 
 if("serviceWorker" in navigator&&location.protocol!=="file:"){
+  let refreshing=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(!refreshing){refreshing=true;location.reload();}});
   window.addEventListener("load",async()=>{
     try{
       const registration=await navigator.serviceWorker.register("./sw.js");

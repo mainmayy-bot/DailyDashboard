@@ -877,6 +877,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
   .main-content{padding-top:max(7px,env(safe-area-inset-top))}
 }
 .pwa-status{position:fixed;z-index:150;right:12px;bottom:14px;max-width:260px;border:1px solid #e2d4b8;border-radius:9px;background:#fff9ed;padding:8px 11px;color:#80683d;font-size:9px;box-shadow:0 7px 24px rgba(45,42,36,.12);opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .2s,transform .2s}
+button,[role="button"],[data-area],[data-project],[data-area-project]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 body.is-offline .pwa-status{opacity:1;transform:none}
 @media(max-width:700px){.pwa-status{right:9px;bottom:calc(68px + env(safe-area-inset-bottom));left:9px;max-width:none;text-align:center}}
 
