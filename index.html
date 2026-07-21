@@ -12,9 +12,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./app-icon-192-v2.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260721-pwa-v37" />
+    <link rel="stylesheet" href="./styles.css?v=20260721-mobile-v39" />
   </head>
-  <body data-mobile-view="today">
+  <body data-mobile-view="areas" data-mobile-project-type="target">
     <main class="app-shell">
       <aside class="sidebar">
         <div class="brand"><b>行</b><div><strong>人生行动台</strong><small>I'M NOT DOING SHIT TODAY</small></div></div>
@@ -62,6 +62,10 @@
         <section class="middle-grid">
           <article class="panel projects-panel">
             <header><div><h2>项目推进</h2><small>按结果拆下一步</small></div><button class="text-btn" data-add="project">＋ 新建项目</button></header>
+            <nav class="mobile-project-tabs" aria-label="项目分类">
+              <button type="button" class="active" data-mobile-project-type="target">目标进展</button>
+              <button type="button" data-mobile-project-type="habit">习惯打卡</button>
+            </nav>
             <div id="projectGrid" class="project-grid"></div>
           </article>
           <article class="panel signals-panel">
@@ -86,6 +90,6 @@
       </form>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./app.js?v=20260721-pwa-v37"></script>
+    <script src="./app.js?v=20260721-mobile-v39"></script>
   </body>
 </html>

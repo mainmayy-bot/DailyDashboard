@@ -423,15 +423,25 @@ function openNewProject(){
 }
 
 const MOBILE_VIEW_KEY="daily-dashboard-mobile-view";
+const MOBILE_PROJECT_TYPE_KEY="daily-dashboard-mobile-project-type";
 function setMobileView(view,scroll=true){
-  const allowed=["today","inbox","projects","areas"],next=allowed.includes(view)?view:"today";
+  const allowed=["areas","projects","inbox","today"],next=allowed.includes(view)?view:"areas";
   document.body.dataset.mobileView=next;
   localStorage.setItem(MOBILE_VIEW_KEY,next);
   document.querySelectorAll(".nav-item").forEach(item=>item.classList.toggle("active",item.dataset.view===next));
   if(scroll)window.scrollTo({top:0,behavior:"smooth"});
 }
 
+function setMobileProjectType(type){
+  const next=type==="habit"?"habit":"target";
+  document.body.dataset.mobileProjectType=next;
+  localStorage.setItem(MOBILE_PROJECT_TYPE_KEY,next);
+  document.querySelectorAll("[data-mobile-project-type]").forEach(button=>button.classList.toggle("active",button.dataset.mobileProjectType===next));
+}
+
 document.addEventListener("click", e => {
+  const mobileProjectType=e.target.closest("[data-mobile-project-type]");
+  if(mobileProjectType){setMobileProjectType(mobileProjectType.dataset.mobileProjectType);return;}
   if(e.target.closest("#cloudAccount")){openCloudAccount();return;}
   if(e.target.matches("[data-cloud-signin]")){cloudAuth("signin");return;}
   if(e.target.matches("[data-cloud-signup]")){cloudAuth("signup");return;}
@@ -701,8 +711,11 @@ $("#sideProjects")?.addEventListener("scroll", e => {
 },{passive:true});
 render();
 initCloud();
-if(window.matchMedia("(max-width: 700px)").matches)setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"today",false);
-window.matchMedia("(max-width: 700px)").addEventListener?.("change",event=>{if(event.matches)setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"today",false);});
+if(window.matchMedia("(max-width: 700px)").matches){
+  setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"areas",false);
+  setMobileProjectType(localStorage.getItem(MOBILE_PROJECT_TYPE_KEY)||"target");
+}
+window.matchMedia("(max-width: 700px)").addEventListener?.("change",event=>{if(event.matches){setMobileView(localStorage.getItem(MOBILE_VIEW_KEY)||"areas",false);setMobileProjectType(localStorage.getItem(MOBILE_PROJECT_TYPE_KEY)||"target");}});
 const updateOnlineStatus=()=>document.body.classList.toggle("is-offline",!navigator.onLine);
 window.addEventListener("online",updateOnlineStatus);
 window.addEventListener("offline",updateOnlineStatus);

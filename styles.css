@@ -879,3 +879,71 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .pwa-status{position:fixed;z-index:150;right:12px;bottom:14px;max-width:260px;border:1px solid #e2d4b8;border-radius:9px;background:#fff9ed;padding:8px 11px;color:#80683d;font-size:9px;box-shadow:0 7px 24px rgba(45,42,36,.12);opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .2s,transform .2s}
 body.is-offline .pwa-status{opacity:1;transform:none}
 @media(max-width:700px){.pwa-status{right:9px;bottom:calc(68px + env(safe-area-inset-bottom));left:9px;max-width:none;text-align:center}}
+
+/* v39 — mobile-first app composition: clear hierarchy, comfortable touch targets. */
+.mobile-project-tabs{display:none}
+@media(max-width:700px){
+  /* The requested app order is Areas → Projects → Todos → Today. */
+  .sidebar nav .nav-item[data-view="areas"]{order:1}
+  .sidebar nav .nav-item[data-view="projects"]{order:2}
+  .sidebar nav .nav-item[data-view="inbox"]{order:3}
+  .sidebar nav .nav-item[data-view="today"]{order:4}
+  .nav-item[data-view="areas"] .nav-icon{color:#55ad82}
+  .nav-item[data-view="projects"] .nav-icon{color:#688be1}
+  .nav-item[data-view="inbox"] .nav-icon{color:#ec8178}
+  .nav-item[data-view="today"] .nav-icon{color:#dfa932}
+  .nav-icon{filter:saturate(1.35) contrast(1.04);opacity:.82}
+  .nav-item.active .nav-icon{filter:saturate(1.7) contrast(1.08);opacity:1}
+
+  body[data-mobile-view="projects"] .projects-panel,
+  body[data-mobile-view="areas"] .areas-panel{min-height:0!important;height:auto!important;padding-bottom:10px!important}
+  .projects-panel>header,.areas-panel>header{align-items:center!important;padding:15px 14px 10px!important}
+  .projects-panel>header h2,.areas-panel>header h2{font-size:17px!important;line-height:22px!important;letter-spacing:-.3px!important}
+  .projects-panel>header small,.areas-panel>header small{margin-top:2px!important;font-size:9px!important;line-height:13px!important}
+  .projects-panel>header .text-btn{min-height:32px!important;border:0!important;background:transparent!important;padding:5px 2px 5px 10px!important;font-size:10px!important}
+  .areas-panel>header>span{max-width:46%!important;font-size:8px!important;line-height:12px!important;text-align:right!important}
+
+  /* Project page: one readable category at a time instead of two squeezed columns. */
+  .mobile-project-tabs{display:grid!important;width:calc(100% - 28px)!important;height:34px!important;grid-template-columns:1fr 1fr!important;gap:3px!important;margin:0 14px 11px!important;border:1px solid #e1e5e7!important;border-radius:10px!important;background:#f0f2f3!important;padding:3px!important}
+  .mobile-project-tabs button{border:0!important;border-radius:7px!important;background:transparent!important;color:#858d92!important;font-size:10px!important;font-weight:600!important;letter-spacing:.1px!important}
+  .mobile-project-tabs button.active{background:#fff!important;color:#30373b!important;box-shadow:0 1px 5px rgba(35,43,49,.09)!important}
+  .project-grid{display:block!important;padding:0 12px 4px!important}
+  .project-type-group{display:none!important;width:100%!important;margin:0!important;border:0!important;background:transparent!important;padding:0!important}
+  body[data-mobile-project-type="target"] .project-type-group.target-group,
+  body[data-mobile-project-type="habit"] .project-type-group.habit-group{display:block!important}
+  .project-type-group>header{display:flex!important;align-items:center!important;justify-content:space-between!important;margin:0 2px 7px!important;padding:0!important}
+  .project-type-group>header b{font-size:11px!important;line-height:15px!important}
+  .project-type-group>header small{display:none!important}
+  .project-type-group>header>span{display:grid!important;min-width:21px!important;height:21px!important;place-items:center!important;border-radius:999px!important;background:#eef1f2!important;color:#92999e!important;font-size:8px!important}
+  .project-type-grid{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  .project-type-grid .classic-project-card{position:relative!important;min-height:88px!important;height:88px!important;border:1px solid color-mix(in srgb,var(--c),white 72%)!important;border-radius:13px!important;background:color-mix(in srgb,var(--c),white 96%)!important;padding:13px 13px 12px!important;box-shadow:0 2px 7px rgba(42,49,54,.025)!important}
+  .project-type-grid .classic-project-card.habit-project{min-height:76px!important;height:76px!important}
+  .classic-project-card .drag-handle{top:10px!important;right:10px!important;opacity:.42!important}
+  .classic-project-card .project-title{display:flex!important;align-items:baseline!important;gap:8px!important;padding-right:18px!important}
+  .classic-project-card .project-title>b{min-width:0!important;overflow:hidden!important;font-size:13px!important;line-height:18px!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+  .classic-project-card .project-title>strong{margin-left:auto!important;font-size:18px!important;line-height:20px!important;font-weight:520!important}
+  .classic-project-card .project-title .habit-total{align-items:baseline!important}
+  .classic-project-card .project-title .habit-total span{display:none!important}
+  .classic-project-card .project-title .habit-total b{font-size:18px!important}
+  .classic-project-card .project-source{margin-top:2px!important;font-size:8px!important;line-height:12px!important}
+  .classic-project-card .project-source i{padding:2px 5px!important;border-radius:999px!important;background:color-mix(in srgb,var(--c),white 89%)!important;color:var(--c)!important}
+  .classic-project-card .project-emphasis-progress{position:absolute!important;right:13px!important;bottom:12px!important;left:13px!important;height:5px!important;margin:0!important;border-radius:999px!important;background:color-mix(in srgb,var(--c),white 89%)!important}
+  .classic-project-card .project-emphasis-progress>i{border-radius:999px!important;background:var(--c)!important}
+  .classic-project-card .project-emphasis-progress>b{right:0!important;bottom:7px!important;font-size:7px!important}
+  .habit-project .project-emphasis-progress{display:none!important}
+  .project-group-empty{min-height:140px!important;border:1px dashed #dfe4e6!important;border-radius:13px!important;background:#fafbfb!important;color:#9aa1a6!important;font-size:10px!important}
+
+  /* Area page: four substantial app cards use the screen vertically. */
+  .area-grid{display:grid!important;grid-template-columns:1fr!important;gap:9px!important;padding:0 12px 12px!important}
+  .area-summary-only{position:relative!important;display:block!important;width:100%!important;height:112px!important;min-height:112px!important;border-radius:14px!important;padding:14px 15px!important;text-align:left!important;box-shadow:0 2px 8px rgba(39,46,51,.025)!important}
+  .area-summary-only .area-card-head{display:grid!important;grid-template-columns:38px minmax(0,1fr)!important;align-items:center!important;gap:11px!important}
+  .area-summary-only .area-icon{width:38px!important;height:38px!important;place-self:center!important;border-radius:11px!important;background:color-mix(in srgb,var(--c),white 88%)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c),white 48%)!important;filter:saturate(1.35)!important}
+  .area-summary-only .area-card-head b{font-size:15px!important;line-height:19px!important;letter-spacing:-.2px!important}
+  .area-summary-only .area-card-head small{font-size:9px!important;line-height:12px!important}
+  .area-summary-only .area-active-summary{display:flex!important;align-items:center!important;gap:7px!important;margin-top:10px!important;font-size:10px!important;line-height:14px!important}
+  .area-summary-only .area-active-summary>i{width:7px!important;height:7px!important;box-shadow:0 0 0 4px color-mix(in srgb,var(--c),white 80%)!important}
+  .area-summary-only footer{right:15px!important;bottom:12px!important;left:15px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;border-top:1px solid color-mix(in srgb,var(--c),white 84%)!important;padding-top:8px!important;font-size:9px!important}
+  .area-summary-only footer b{font-size:9px!important}
+  .area-summary-only .ring{right:-26px!important;bottom:-34px!important;width:108px!important;height:108px!important;opacity:.16!important}
+  .area-summary-only .ring:after{inset:18px!important}
+}
