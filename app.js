@@ -186,6 +186,9 @@ function render() {
   $(".areas-panel header>span").textContent="长期方向 · 当前重点 · 持续投入";
   $(".signals-panel h2").textContent="数据概览";
   renderTimeline(steps); renderFocus(steps,anytime); renderProjects(); renderAreas(); renderSignals(steps);
+  if(window.matchMedia("(max-width: 700px), (pointer: coarse)").matches){
+    document.querySelectorAll('[draggable="true"]').forEach(element=>{element.draggable=false;});
+  }
   $(".refine-head")?.remove(); $("#refineList")?.remove();
 }
 
@@ -568,7 +571,7 @@ document.addEventListener("dragend", e => { e.target.closest(".project-card,.foc
 
 // Mobile browsers do not implement HTML5 drag/drop consistently. Keep tap actions
 // independent, and use a short long-press on the visible grip for touch sorting.
-let mobileTouchSort=null, suppressMobileClickUntil=0, mobileTapReplaying=false;
+let mobileTouchSort=null, suppressMobileClickUntil=0;
 const mobileSortHandleSelector=".todo-grip,.drag-handle,.modal-grip";
 const mobileActionSelector="[data-complete-action],[data-step],[data-area-project-step],[data-area-step],[data-toggle-subtask]";
 
@@ -663,23 +666,6 @@ document.addEventListener("touchcancel",()=>cancelMobileSort(false),{passive:tru
 
 // On iOS a draggable ancestor can swallow the synthetic click. Complete directly
 // on touch release, then suppress only the duplicate synthetic click.
-document.addEventListener("pointerup",e=>{
-  if(e.pointerType!=="touch"||mobileTouchSort?.active)return;
-  const control=e.target.closest("button,[role='button'],[data-area],[data-project],[data-area-project]");
-  if(!control)return;
-  e.preventDefault();e.stopPropagation();
-  suppressMobileClickUntil=Date.now()+700;
-  mobileTapReplaying=true;
-  control.click();
-  mobileTapReplaying=false;
-},{passive:false});
-
-document.addEventListener("click",e=>{
-  if(mobileTapReplaying)return;
-  if(Date.now()>suppressMobileClickUntil)return;
-  e.preventDefault();e.stopImmediatePropagation();
-},true);
-
 let resizeState=null;
 document.addEventListener("pointerdown", e => {
   const handle=e.target.closest("[data-resize-key]");
