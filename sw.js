@@ -1,5 +1,5 @@
-const CACHE_NAME="daily-dashboard-v37";
-const APP_SHELL=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./app-icon.svg","./app-icon-192.png","./app-icon-512.png"];
+const CACHE_NAME="daily-dashboard-v38";
+const APP_SHELL=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./app-icon.svg","./app-icon-192-v2.png","./app-icon-512-v2.png"];
 
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));
