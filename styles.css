@@ -749,3 +749,51 @@ dialog:has(.project-detail-hero) .detail-step-grid.show-completed .completed-ste
 .compact-completed-toggle span,.compact-completed-toggle b,.compact-completed-toggle i{display:inline!important;min-width:0!important;width:auto!important;height:auto!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;padding:0!important;color:#9aa0a5!important;font-size:7px!important;font-style:normal!important;font-weight:500!important;line-height:1.2!important}
 .compact-completed-toggle b:before{content:"· "!important}.compact-completed-toggle i:before{content:"· "!important}
 .compact-completed-toggle:hover span,.compact-completed-toggle:hover b,.compact-completed-toggle:hover i{color:#666e73!important}
+
+/* v29 — stable iPhone typography and a compact, aligned mobile composition. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+@media(max-width:600px){
+  .area-summary-only .area-card-head{grid-template-columns:25px minmax(0,1fr)!important;align-items:start!important;gap:8px!important}
+  .area-summary-only .area-icon{width:25px!important;height:25px!important;margin:0!important;transform:none!important}
+  .area-summary-only .area-card-head>span{display:grid!important;align-content:start!important;gap:1px!important;min-width:0!important;padding-top:0!important;text-align:left!important}
+  .area-summary-only .area-card-head b{font-size:11px!important;line-height:14px!important}
+  .area-summary-only .area-card-head small{font-size:7px!important;line-height:10px!important}
+  .area-summary-only .area-active-summary{margin-top:9px!important}
+
+  .timeline-panel{overflow:hidden!important}
+  .timeline{padding-right:7px!important;padding-left:7px!important}
+  .timeline .time-row{height:60px!important;min-height:60px!important;padding-left:43px!important}
+  .timeline .time-row>time{font-size:8px!important;line-height:14px!important}
+  .timeline-lanes{left:43px!important}
+  .timeline-lanes .time-task.parallel{top:4px!important;min-height:51px!important;border-radius:8px!important}
+  .time-task .timeline-complete{left:7px!important;top:50%!important;width:22px!important;height:22px!important;margin:0!important;transform:translateY(-50%)!important}
+  .time-task .timeline-complete>i{width:17px!important;height:17px!important}
+  .time-task .timeline-task-main,.time-task.no-note .timeline-task-main{display:flex!important;height:100%!important;align-items:center!important;padding:4px 7px 8px 34px!important}
+  .time-task .timeline-task-main>span{display:block!important;width:100%!important;min-width:0!important;overflow:hidden!important;transform:none!important}
+  .time-task .timeline-task-main b{display:block!important;overflow:hidden!important;font-size:9px!important;line-height:13px!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+  .time-task .timeline-task-main small{display:block!important;margin-top:2px!important;overflow:hidden!important;font-size:6.5px!important;line-height:9px!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+  .time-task .timeline-note{display:none!important}
+  .time-task .resize-handle{height:8px!important}
+  .time-task .resize-handle>i{width:22px!important;height:2px!important}
+
+  dialog,dialog:has(.project-detail-hero){width:calc(100% - 18px)!important;max-height:88dvh!important;margin:auto!important}
+  dialog .modal-card{padding:10px!important}
+  dialog:has(.project-detail-hero) .project-detail-hero{padding:11px 12px!important}
+  dialog:has(.project-detail-hero) .project-name-input{font-size:16px!important;line-height:21px!important}
+  dialog:has(.project-detail-hero) .detail-section-title b{font-size:11px!important}
+  dialog:has(.project-detail-hero) .detail-section-title small{font-size:7px!important}
+  dialog:has(.project-detail-hero) .detail-step-grid{gap:5px!important;max-height:42dvh!important}
+  dialog:has(.project-detail-hero) .detail-step-grid .detail-step-card{min-height:48px!important;padding-top:6px!important;padding-bottom:6px!important}
+  dialog:has(.project-detail-hero) .detail-step-card .step-name-input{font-size:11px!important;line-height:16px!important}
+  dialog:has(.project-detail-hero) .detail-step-card>div small{font-size:7px!important;line-height:10px!important}
+  dialog:has(.project-detail-hero) .project-settings>label:first-child select{font-size:11px!important;transform:none!important}
+  dialog:has(.project-detail-hero) .detail-add-row input{font-size:13px!important}
+}
+
+/* v30 — desktop timeline text is centered as one block inside the event card. */
+@media(min-width:601px){
+  .time-task.no-note .timeline-task-main{position:relative!important;display:block!important;height:100%!important;padding:0!important}
+  .time-task.no-note .timeline-task-main>span{position:absolute!important;top:50%!important;right:10px!important;left:42px!important;display:block!important;min-width:0!important;transform:translateY(-54%)!important}
+  .time-task.no-note .timeline-task-main b{display:block!important;overflow:hidden!important;font-size:10px!important;line-height:14px!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+  .time-task.no-note .timeline-task-main small{display:block!important;margin-top:1px!important;font-size:7px!important;line-height:10px!important}
+}
